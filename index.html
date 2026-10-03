@@ -112,8 +112,8 @@ main{padding:32px 0 60px;}
 .bar-fill{height:100%;background:linear-gradient(90deg,var(--orange),var(--pink));border-radius:20px;transition:width .3s ease;}
 .bar-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:rgba(255,243,214,.6);}
 
-.trend{display:flex;align-items:flex-end;gap:8px;height:110px;margin-top:12px;}
-.trend .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;justify-content:flex-end;height:100%;}
+.trend{display:flex;align-items:flex-end;gap:8px;height:110px;margin-top:12px;overflow-x:auto;padding-bottom:2px;}
+.trend .col{flex:0 0 auto;min-width:26px;display:flex;flex-direction:column;align-items:center;gap:6px;justify-content:flex-end;height:100%;}
 .trend .col .bar{width:100%;background:linear-gradient(180deg,var(--orange),var(--pink));border-radius:5px 5px 0 0;min-height:3px;}
 .trend .col .day{font-family:var(--mono);font-size:9.5px;color:rgba(255,243,214,.45);}
 
@@ -169,6 +169,15 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 .geo-mode-toggle{display:flex;background:rgba(11,18,32,.75);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .geo-mode-toggle button{background:none;color:rgba(255,243,214,.6);padding:8px 12px;font-size:11.5px;font-weight:700;font-family:var(--mono);cursor:pointer;}
 .geo-mode-toggle button.active{background:linear-gradient(135deg,#2563EB,#3B82F6);color:#fff;}
+
+.ov-filter{display:flex;flex-wrap:wrap;align-items:center;gap:14px;}
+.seg-toggle{display:flex;background:rgba(11,18,32,.75);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;}
+.seg-toggle button{background:none;border:none;color:rgba(255,243,214,.6);padding:9px 14px;font-size:11.5px;font-weight:700;font-family:var(--mono);cursor:pointer;}
+.seg-toggle button.active{background:linear-gradient(135deg,var(--cyan),#1b9fc9);color:#04121a;}
+.ov-filter-controls{display:flex;align-items:center;gap:8px;}
+.ov-filter-controls input,.ov-filter-controls select{padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:#fff;font-size:13.5px;font-family:var(--mono);}
+.ov-filter-controls .sm{color:rgba(255,243,214,.5);}
+@media (max-width:620px){ .ov-filter{flex-direction:column;align-items:stretch;} .ov-filter-controls{flex-wrap:wrap;} }
 
 .geo-marker-g{cursor:pointer;}
 .geo-pulse-c{fill:#3B82F6;transform-box:fill-box;transform-origin:center;animation:geopulse 2.4s ease-out infinite;pointer-events:none;}
@@ -266,13 +275,29 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     <main class="wrap">
 
   <section class="view active" id="v-overview">
+    <div class="panel">
+      <div class="ov-filter">
+        <div class="seg-toggle" id="ovFilterSeg">
+          <button type="button" data-mode="month" class="active">Month</button>
+          <button type="button" data-mode="year">Year</button>
+          <button type="button" data-mode="range">Custom range</button>
+        </div>
+        <div class="ov-filter-controls">
+          <input type="month" id="ovFilterMonth" class="ov-ctl" data-mode="month">
+          <select id="ovFilterYear" class="ov-ctl" data-mode="year" style="display:none;"></select>
+          <input type="date" id="ovFilterFrom" class="ov-ctl" data-mode="range" style="display:none;">
+          <span class="ov-ctl sm" data-mode="range" style="display:none;">to</span>
+          <input type="date" id="ovFilterTo" class="ov-ctl" data-mode="range" style="display:none;">
+        </div>
+      </div>
+    </div>
     <div class="cards" id="ovCards"></div>
     <div class="panel">
       <h2>Month target progress <span class="sm" id="ovMonthLabel"></span></h2>
       <div id="ovTargetBlock"></div>
     </div>
     <div class="panel">
-      <h2>Last 7 days <span class="sm">revenue ₱</span></h2>
+      <h2 id="ovTrendTitle">Last 7 days <span class="sm">revenue ₱</span></h2>
       <div class="trend" id="ovTrend"></div>
     </div>
     <div class="panel">
@@ -608,6 +633,62 @@ document.getElementById('todayLabel').textContent = 'chug jug ph · ' + new Date
 document.getElementById('saleDate').value = todayStr();
 document.getElementById('ovMonthLabel').textContent = monthStr();
 document.getElementById('tgMonthLabel').textContent = monthStr();
+
+// overview date filter: Month / Year / Custom range
+let ovFilter = { mode:'month', month: monthStr(), year: new Date().getFullYear(), from: todayStr(), to: todayStr() };
+(function initOvFilter(){
+  const monthInput = document.getElementById('ovFilterMonth');
+  const yearSel = document.getElementById('ovFilterYear');
+  const fromInput = document.getElementById('ovFilterFrom');
+  const toInput = document.getElementById('ovFilterTo');
+  monthInput.value = ovFilter.month;
+  fromInput.value = ovFilter.from;
+  toInput.value = ovFilter.to;
+  const curYear = new Date().getFullYear();
+  for(let y=curYear; y>=curYear-4; y--){
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    yearSel.appendChild(opt);
+  }
+  yearSel.value = ovFilter.year;
+
+  document.querySelectorAll('#ovFilterSeg button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ovFilter.mode = btn.dataset.mode;
+      document.querySelectorAll('#ovFilterSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+      document.querySelectorAll('.ov-ctl').forEach(el=>{
+        el.style.display = el.dataset.mode===ovFilter.mode ? '' : 'none';
+      });
+      renderOverview();
+    });
+  });
+  monthInput.addEventListener('change', ()=>{ ovFilter.month = monthInput.value || monthStr(); renderOverview(); });
+  yearSel.addEventListener('change', ()=>{ ovFilter.year = parseInt(yearSel.value); renderOverview(); });
+  fromInput.addEventListener('change', ()=>{ ovFilter.from = fromInput.value || todayStr(); renderOverview(); });
+  toInput.addEventListener('change', ()=>{ ovFilter.to = toInput.value || todayStr(); renderOverview(); });
+})();
+
+// Resolves the current overview filter into a concrete date range plus how
+// to bucket the trend chart (daily bars for short spans, monthly for long ones).
+function getOvRange(){
+  const today = todayStr();
+  if(ovFilter.mode==='year'){
+    const y = ovFilter.year;
+    return { start: `${y}-01-01`, end: `${y}-12-31`, label: String(y), bucket:'month' };
+  }
+  if(ovFilter.mode==='range'){
+    let start = ovFilter.from, end = ovFilter.to;
+    if(start > end){ const t=start; start=end; end=t; }
+    const days = (new Date(end) - new Date(start)) / 86400000;
+    return { start, end, label: `${start} → ${end}`, bucket: days>45?'month':'day' };
+  }
+  // month
+  const m = ovFilter.month || monthStr();
+  const [y, mo] = m.split('-').map(Number);
+  const lastDay = new Date(y, mo, 0).getDate();
+  const label = new Date(y, mo-1, 1).toLocaleDateString('en-PH',{month:'long', year:'numeric'});
+  return { start: `${m}-01`, end: `${m}-${String(lastDay).padStart(2,'0')}`, label, bucket:'day' };
+}
 
 // tabs
 document.querySelectorAll('.sidebar-nav button').forEach(btn=>{
@@ -964,48 +1045,74 @@ function hudGauge(pct, color, size){
 
 function renderOverview(){
   const today = todayStr();
-  const todaySales = salesList.filter(s=>s.date===today);
-  const todayRevenue = todaySales.reduce((a,s)=>a+(s.revenue||0),0);
-  const todayUnits = todaySales.reduce((a,s)=>a+(s.qty||0),0);
+  const range = getOvRange();
+  const periodSales = salesList.filter(s=>s.date && s.date>=range.start && s.date<=range.end);
+  const periodRevenue = periodSales.reduce((a,s)=>a+(s.revenue||0),0);
+  const periodUnits = periodSales.reduce((a,s)=>a+(s.qty||0),0);
 
-  const monthSales = salesList.filter(s=>s.date && s.date.startsWith(monthStr()));
-  const monthRevenue = monthSales.reduce((a,s)=>a+(s.revenue||0),0);
-  const now = new Date();
-  const daysElapsed = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
-  const projected = daysElapsed>0 ? (monthRevenue/daysElapsed)*daysInMonth : 0;
+  const totalDays = Math.round((new Date(range.end)-new Date(range.start))/86400000) + 1;
+  const ongoing = range.end >= today; // period includes today or is entirely in the future-ending-today sense
+  const elapsedDays = ongoing ? Math.max(1, Math.round((Math.min(new Date(today),new Date(range.end)) - new Date(range.start))/86400000) + 1) : totalDays;
+  const elapsedPct = Math.min(100, (elapsedDays/totalDays)*100);
+  const avgPerDay = periodRevenue / Math.max(1, elapsedDays);
+  const projectedTotal = avgPerDay * totalDays;
 
   const lowItems = FLAVORS.filter(f=>{
     const inv = inventory[f.id];
     return inv && inv.stock <= inv.lowThreshold;
   });
-
-  const dayPct = daysInMonth>0 ? (daysElapsed/daysInMonth*100) : 0;
-  const targetPct = target.revenueTarget ? Math.min(100, monthRevenue/target.revenueTarget*100) : 0;
   const stockPct = lowItems.length ? Math.max(8, 100 - (lowItems.length/FLAVORS.length*100)) : 100;
+
+  const card3 = ongoing ? {
+    label: 'projected total', value: fmtPeso(Math.round(projectedTotal)), sub: 'at current pace',
+    pct: Math.min(100, (periodRevenue/Math.max(1,projectedTotal))*100)
+  } : {
+    label: 'avg revenue / day', value: fmtPeso(Math.round(avgPerDay)), sub: `over ${totalDays} days`, pct: 100
+  };
+
   document.getElementById('ovCards').innerHTML = `
-    <div class="card card-gauge">${hudGauge(dayPct,'var(--cyan)')}<div class="gauge-text"><div class="label">today's revenue</div><div class="value">${fmtPeso(todayRevenue)}</div><div class="sub">${todayUnits} jugs sold</div></div></div>
-    <div class="card card-gauge">${hudGauge(targetPct,'var(--amber)')}<div class="gauge-text"><div class="label">month revenue</div><div class="value">${fmtPeso(monthRevenue)}</div><div class="sub">${monthSales.length} sales logged</div></div></div>
-    <div class="card card-gauge">${hudGauge(Math.min(100,(monthRevenue/Math.max(1,projected))*100),'var(--lime)')}<div class="gauge-text"><div class="label">projected month-end</div><div class="value">${fmtPeso(Math.round(projected))}</div><div class="sub">at current pace</div></div></div>
+    <div class="card card-gauge">${hudGauge(elapsedPct,'var(--cyan)')}<div class="gauge-text"><div class="label">${range.label} revenue</div><div class="value">${fmtPeso(periodRevenue)}</div><div class="sub">${periodSales.length} sales logged</div></div></div>
+    <div class="card card-gauge">${hudGauge(elapsedPct,'var(--amber)')}<div class="gauge-text"><div class="label">units sold</div><div class="value">${periodUnits}</div><div class="sub">jugs in ${range.label}</div></div></div>
+    <div class="card card-gauge">${hudGauge(card3.pct,'var(--lime)')}<div class="gauge-text"><div class="label">${card3.label}</div><div class="value">${card3.value}</div><div class="sub">${card3.sub}</div></div></div>
     <div class="card card-gauge ${lowItems.length?'warn':''}">${hudGauge(stockPct, lowItems.length?'var(--pink)':'var(--lime)')}<div class="gauge-text"><div class="label">low stock alerts</div><div class="value">${lowItems.length}</div><div class="sub">${lowItems.length? lowItems.map(f=>f.name).join(', ') : 'all good'}</div></div></div>
   `;
 
+  // Target progress always tracks the real current calendar month (targets
+  // aren't stored per historical period), independent of the filter above.
+  const monthRevenue = salesList.filter(s=>s.date && s.date.startsWith(monthStr())).reduce((a,s)=>a+(s.revenue||0),0);
   const revPct = target.revenueTarget ? Math.min(100, monthRevenue/target.revenueTarget*100) : 0;
   document.getElementById('ovTargetBlock').innerHTML = target.revenueTarget ? `
     <div class="bar-row"><span>${fmtPeso(monthRevenue)} of ${fmtPeso(target.revenueTarget)}</span><span>${revPct.toFixed(0)}%</span></div>
     <div class="bar-track"><div class="bar-fill" style="width:${revPct}%"></div></div>
   ` : `<div class="empty">No target set yet — head to the Targets tab.</div>`;
 
-  // 7-day trend
-  const days = [];
-  for(let i=6;i>=0;i--){
-    const d = new Date(); d.setDate(d.getDate()-i);
-    const key = d.toISOString().slice(0,10);
-    const rev = salesList.filter(s=>s.date===key).reduce((a,s)=>a+(s.revenue||0),0);
-    days.push({key, label: d.toLocaleDateString('en-PH',{weekday:'short'}), rev});
+  // trend chart, bucketed to match the selected filter
+  const buckets = [];
+  if(range.bucket==='day'){
+    let d = new Date(range.start+'T00:00:00');
+    const end = new Date(range.end+'T00:00:00');
+    while(d<=end){
+      const key = d.toISOString().slice(0,10);
+      buckets.push({key, label: d.toLocaleDateString('en-PH',{month:'short',day:'numeric'})});
+      d.setDate(d.getDate()+1);
+    }
+  } else {
+    let d = new Date(range.start+'T00:00:00');
+    const end = new Date(range.end+'T00:00:00');
+    while(d<=end){
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      buckets.push({key, label: d.toLocaleDateString('en-PH',{month:'short', year: d.getFullYear()!==new Date().getFullYear()?'2-digit':undefined})});
+      d.setMonth(d.getMonth()+1);
+    }
   }
-  const maxRev = Math.max(1, ...days.map(d=>d.rev));
-  document.getElementById('ovTrend').innerHTML = days.map(d=>`
+  buckets.forEach(b=>{
+    b.rev = range.bucket==='day'
+      ? periodSales.filter(s=>s.date===b.key).reduce((a,s)=>a+(s.revenue||0),0)
+      : periodSales.filter(s=>s.date && s.date.startsWith(b.key)).reduce((a,s)=>a+(s.revenue||0),0);
+  });
+  document.getElementById('ovTrendTitle').innerHTML = `${range.bucket==='day'?'Daily':'Monthly'} revenue <span class="sm">${range.label}</span>`;
+  const maxRev = Math.max(1, ...buckets.map(d=>d.rev));
+  document.getElementById('ovTrend').innerHTML = buckets.map(d=>`
     <div class="col"><div class="bar" style="height:${Math.max(3,(d.rev/maxRev)*100)}%" title="${fmtPeso(d.rev)}"></div><div class="day">${d.label}</div></div>
   `).join('');
 
