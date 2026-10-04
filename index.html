@@ -312,6 +312,10 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="8" width="11" height="7.5" rx="1"/><path d="M12.5 10.5h3.3l2.2 2.7v2.3h-5.5"/><circle cx="5" cy="16.8" r="1.4"/><circle cx="14.5" cy="16.8" r="1.4"/></svg>
         <span>Suppliers</span>
       </button>
+      <button data-view="finance">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.8"/><path d="M10 5.5v9M12.6 7.3c0-1-1-1.8-2.4-1.8-1.5 0-2.6.9-2.6 1.9 0 1.1.9 1.6 2.6 2 1.8.4 2.8 1 2.8 2.1 0 1.1-1.2 1.9-2.7 1.9-1.4 0-2.5-.7-2.6-1.8"/></svg>
+        <span>Finance</span>
+      </button>
       <button data-view="customers">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="6.5" r="3"/><path d="M1.8 17c0-3.3 2.6-5.6 5.7-5.6s5.7 2.3 5.7 5.6"/><circle cx="15" cy="7.5" r="2.3"/><path d="M14 11.3c2.4.1 4.2 2 4.2 4.6"/></svg>
         <span>Customers</span>
@@ -581,8 +585,69 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <h2>Supplier directory <span class="sm" id="suppCount"></span></h2>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Supplier</th><th>Contact</th><th>Phone</th><th>Supplies</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Supplier</th><th>Contact</th><th>Phone</th><th>Supplies</th><th>Total purchased</th><th>Status</th><th></th></tr></thead>
         <tbody id="suppBody"></tbody>
+      </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>New purchase order <span class="sm" id="poNoPreview"></span></h2>
+      <div class="order-form">
+        <div class="field"><label>Supplier</label><select id="poSupplier"></select></div>
+        <div class="field"><label>Date</label><input type="date" id="poDate"></div>
+        <div class="field"><label>Notes</label><input type="text" id="poNotes" placeholder="optional"></div>
+      </div>
+      <div class="order-summary" id="poDraftItems" style="margin:4px 0 14px;"></div>
+      <div class="order-form" style="grid-template-columns:1.4fr 80px 90px auto;">
+        <div class="field"><label>Component</label><select id="poItemComponent"></select></div>
+        <div class="field"><label>Qty</label><input type="number" id="poItemQty" value="1" min="0" step="0.01"></div>
+        <div class="field"><label>Unit cost</label><input type="number" id="poItemCost" value="0" min="0" step="0.01"></div>
+        <button class="btn secondary" onclick="addPoDraftItem()">Add item</button>
+      </div>
+      <button class="btn" id="createPoBtn" onclick="createPurchaseOrder()" style="margin-top:12px;">Create purchase order</button>
+    </div>
+    <div class="panel">
+      <h2>Purchase orders <span class="sm" id="poCount"></span></h2>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>PO #</th><th>Supplier</th><th>Date</th><th>Items</th><th>Total cost</th><th>Status</th><th></th></tr></thead>
+        <tbody id="poBody"></tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="v-finance">
+    <div class="cards" id="financeKpis"></div>
+    <div class="panel">
+      <h2>Cash position <span class="sm">opening balance + cash in/out</span></h2>
+      <div class="target-form">
+        <div class="field"><label>Opening cash balance (₱)</label><input type="number" id="cashOpening" min="0"></div>
+        <button class="btn" id="saveCashBtn" onclick="saveCashSettings()">Save</button>
+      </div>
+      <div class="order-summary" id="cashFlowBlock"></div>
+    </div>
+    <div class="panel">
+      <h2>Add expense <span class="sm">marketing, delivery, labor, platform fees, etc.</span></h2>
+      <div class="form-row">
+        <div class="field"><label>Date</label><input type="date" id="expDate"></div>
+        <div class="field"><label>Category</label>
+          <select id="expCategory"><option>Marketing</option><option>Delivery</option><option>Labor</option><option>Utilities</option><option>Packaging</option><option>Platform fees</option><option>Transportation</option><option>Supplies</option><option>Miscellaneous</option></select>
+        </div>
+        <div class="field"><label>Amount (₱)</label><input type="number" id="expAmount" value="0" min="0"></div>
+        <div class="field"><label>Payment method</label>
+          <select id="expPayMethod"><option>Cash</option><option>GCash</option><option>Bank Transfer</option><option>Maya</option><option>COD</option><option>Other</option></select>
+        </div>
+        <div class="field"><label>Notes</label><input type="text" id="expNotes" placeholder="optional"></div>
+        <button class="btn" id="addExpenseBtn" onclick="addExpense()">Add</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Expenses <span class="sm" id="expCount"></span></h2>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Payment</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="expBody"></tbody>
       </table>
       </div>
     </div>
@@ -800,6 +865,10 @@ let productsList = [];    // {id, name, category, colorTheme, sellingPrice, desc
 let componentsList = [];  // {id, name, category, unit, stock, lowThreshold, costPerUnit, ts}
 let recipeItemsList = []; // {id, productId, componentId, qtyPerUnit}
 let movementsList = [];   // {id, ts, itemType, itemId, itemName, qty, direction, reason, reference, notes}
+let expensesList = [];    // {id, date, category, amount, paymentMethod, notes, ts}
+let purchaseOrdersList = []; // {id, poNo, supplierId, supplierName, status, items:[{componentId,componentName,qty,unitCost}], totalCost, orderedDate, receivedDate, notes, ts}
+let poDraftItems = [];    // in-memory, not persisted until the PO is created
+let cashSettings = { openingCash: 0 };
 
 // Returns the sellable catalog as {id,name,price} — from live Products once
 // loaded (so newly added products show up everywhere), falling back to the
@@ -832,6 +901,23 @@ function refreshProductDropdowns(){
     });
     if([...sel.options].some(o=>o.value===prevVal)) sel.value = prevVal;
   });
+}
+
+// Keeps the purchase-order supplier/component dropdowns in sync with live
+// data, same pattern as refreshProductDropdowns().
+function refreshPoDropdowns(){
+  const suppSel = document.getElementById('poSupplier');
+  if(suppSel){
+    const prevVal = suppSel.value;
+    suppSel.innerHTML = suppliersList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('') || '<option value="">Add a supplier first</option>';
+    if([...suppSel.options].some(o=>o.value===prevVal)) suppSel.value = prevVal;
+  }
+  const compSel = document.getElementById('poItemComponent');
+  if(compSel){
+    const prevVal = compSel.value;
+    compSel.innerHTML = componentsList.map(c=>`<option value="${c.id}">${c.name} (${c.unit})</option>`).join('') || '<option value="">Add a component first</option>';
+    if([...compSel.options].some(o=>o.value===prevVal)) compSel.value = prevVal;
+  }
 }
 
 function computeCosting(productId){
@@ -923,6 +1009,192 @@ function renderMovements(){
       <td>${m.reason}</td>
       <td class="mono sm">${m.reference||'—'}</td>
     </tr>`).join('');
+}
+
+// --- Expenses ---------------------------------------------------------------
+async function addExpense(){
+  const date = document.getElementById('expDate').value || todayStr();
+  const category = document.getElementById('expCategory').value;
+  const amount = Math.max(0, parseFloat(document.getElementById('expAmount').value)||0);
+  const paymentMethod = document.getElementById('expPayMethod').value;
+  const notes = document.getElementById('expNotes').value.trim();
+  if(amount<=0) return;
+  const btn = document.getElementById('addExpenseBtn');
+  btn.disabled = true;
+  try{
+    await db.collection('expenses').add({date, category, amount, paymentMethod, notes, ts:Date.now()});
+    document.getElementById('expAmount').value = 0;
+    document.getElementById('expNotes').value = '';
+  } finally { btn.disabled = !canWrite ? true : false; }
+}
+async function deleteExpense(id){
+  await db.doc('expenses/'+id).delete();
+}
+function renderExpenses(){
+  const body = document.getElementById('expBody');
+  if(!body) return;
+  document.getElementById('expCount').textContent = expensesList.length + ' logged';
+  if(expensesList.length===0){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No expenses logged yet.</div></td></tr>'; return; }
+  body.innerHTML = expensesList.map(e=>`
+    <tr>
+      <td class="mono">${e.date}</td>
+      <td>${e.category}</td>
+      <td class="mono">${fmtPeso(e.amount)}</td>
+      <td>${e.paymentMethod||'—'}</td>
+      <td>${e.notes||'—'}</td>
+      <td><button class="btn ghost" onclick="deleteExpense('${e.id}')">delete</button></td>
+    </tr>`).join('');
+}
+
+// --- Purchase orders (supplier purchasing) ----------------------------------
+function nextPoNo(){
+  const year = new Date().getFullYear();
+  const prefix = 'PO-'+year+'-';
+  const countThisYear = purchaseOrdersList.filter(p=>p.poNo && p.poNo.startsWith(prefix)).length;
+  return prefix + String(countThisYear+1).padStart(5,'0');
+}
+function updatePoNoPreview(){
+  const el = document.getElementById('poNoPreview');
+  if(el) el.textContent = 'next: ' + nextPoNo();
+}
+function renderPoDraftItems(){
+  const box = document.getElementById('poDraftItems');
+  if(!box) return;
+  if(poDraftItems.length===0){ box.innerHTML = '<div><span>No items added yet</span><span>—</span></div>'; return; }
+  const total = poDraftItems.reduce((a,it)=>a+it.qty*it.unitCost,0);
+  box.innerHTML = poDraftItems.map((it,i)=>`
+    <div><span>${it.componentName} × ${it.qty}</span><span>${fmtPeso(it.qty*it.unitCost)} &nbsp;<button class="btn ghost" onclick="removePoDraftItem(${i})">×</button></span></div>
+  `).join('') + `<div style="border-top:1px solid var(--border);padding-top:9px;margin-top:4px;"><span>Total</span><span>${fmtPeso(total)}</span></div>`;
+}
+function addPoDraftItem(){
+  const compSel = document.getElementById('poItemComponent');
+  const componentId = compSel.value;
+  const comp = componentsList.find(c=>c.id===componentId);
+  if(!comp) return;
+  const qty = Math.max(0, parseFloat(document.getElementById('poItemQty').value)||0);
+  const unitCost = Math.max(0, parseFloat(document.getElementById('poItemCost').value)||0);
+  if(qty<=0) return;
+  poDraftItems.push({componentId, componentName:comp.name, qty, unitCost});
+  document.getElementById('poItemQty').value = 1;
+  document.getElementById('poItemCost').value = 0;
+  renderPoDraftItems();
+}
+function removePoDraftItem(idx){
+  poDraftItems.splice(idx,1);
+  renderPoDraftItems();
+}
+async function createPurchaseOrder(){
+  if(poDraftItems.length===0) return;
+  const supplierId = document.getElementById('poSupplier').value;
+  const supplier = suppliersList.find(s=>s.id===supplierId);
+  if(!supplier) return;
+  const date = document.getElementById('poDate').value || todayStr();
+  const notes = document.getElementById('poNotes').value.trim();
+  const totalCost = poDraftItems.reduce((a,it)=>a+it.qty*it.unitCost,0);
+  const poNo = nextPoNo();
+  const btn = document.getElementById('createPoBtn');
+  btn.disabled = true;
+  try{
+    await db.collection('purchase_orders').add({
+      poNo, supplierId, supplierName:supplier.name, status:'ORDERED',
+      items: poDraftItems.slice(), totalCost, orderedDate:date, receivedDate:null, notes, ts:Date.now()
+    });
+    poDraftItems = [];
+    renderPoDraftItems();
+    document.getElementById('poNotes').value = '';
+    updatePoNoPreview();
+  } finally { btn.disabled = !canWrite ? true : false; }
+}
+
+// Receiving a PO updates component stock, moves each component's cost to the
+// latest purchase price, and logs an inventory_movements row per item — the
+// mirror image of deductComponentsForOrder() on the sales side.
+async function receivePurchaseOrder(po){
+  for(const item of po.items||[]){
+    const comp = componentsList.find(c=>c.id===item.componentId);
+    if(!comp){ console.warn('PO references missing component', item.componentId); continue; }
+    const newStock = (comp.stock||0) + item.qty;
+    await db.doc('components/'+comp.id).update({stock:newStock, costPerUnit:item.unitCost});
+    await db.collection('inventory_movements').add({
+      ts:Date.now(), itemType:'component', itemId:comp.id, itemName:comp.name,
+      qty:item.qty, direction:'in', reason:'PURCHASE', reference:po.poNo, notes:''
+    });
+  }
+  await db.doc('purchase_orders/'+po.id).update({status:'RECEIVED', receivedDate:todayStr()});
+}
+async function markPoReceived(id){
+  const po = purchaseOrdersList.find(p=>p.id===id);
+  if(!po || po.status==='RECEIVED') return; // never double-deduct/receive
+  await receivePurchaseOrder(po);
+}
+async function cancelPo(id){
+  const po = purchaseOrdersList.find(p=>p.id===id);
+  if(!po || po.status==='RECEIVED') return;
+  await db.doc('purchase_orders/'+id).update({status:'CANCELLED'});
+}
+const PO_PILL = { DRAFT:'low', ORDERED:'low', PARTIALLY_RECEIVED:'low', RECEIVED:'ok', CANCELLED:'low' };
+function renderPurchaseOrders(){
+  const body = document.getElementById('poBody');
+  if(!body) return;
+  updatePoNoPreview();
+  document.getElementById('poCount').textContent = purchaseOrdersList.length + ' on file';
+  if(purchaseOrdersList.length===0){ body.innerHTML = '<tr><td colspan="7"><div class="empty">No purchase orders yet.</div></td></tr>'; return; }
+  body.innerHTML = purchaseOrdersList.map(po=>`
+    <tr>
+      <td class="mono">${po.poNo}</td>
+      <td>${po.supplierName}</td>
+      <td class="mono">${po.orderedDate||'—'}</td>
+      <td class="mono">${(po.items||[]).length}</td>
+      <td class="mono">${fmtPeso(po.totalCost||0)}</td>
+      <td><span class="pill ${PO_PILL[po.status]||'low'}">${(po.status||'DRAFT').toLowerCase().replace('_',' ')}</span></td>
+      <td>${po.status==='ORDERED' ? `<button class="btn ghost" onclick="markPoReceived('${po.id}')">receive</button> <button class="btn ghost" onclick="cancelPo('${po.id}')">cancel</button>` : ''}</td>
+    </tr>`).join('');
+}
+
+// --- Finance (revenue, COGS, gross/net profit, cash flow) -------------------
+async function saveCashSettings(){
+  const openingCash = Math.max(0, parseFloat(document.getElementById('cashOpening').value)||0);
+  await db.doc('settings/finance').set({openingCash});
+}
+function renderFinance(){
+  const kpiEl = document.getElementById('financeKpis');
+  if(!kpiEl) return;
+
+  const revenue = salesList.reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
+  const cogs = salesList.reduce((a,s)=>{
+    const costing = computeCosting(s.flavorId);
+    return a + costing.cogs*(s.qty||0);
+  },0);
+  const grossProfit = revenue - cogs;
+  const grossMargin = revenue>0 ? grossProfit/revenue*100 : 0;
+  const totalExpenses = expensesList.reduce((a,e)=>a+(e.amount||0),0);
+  const netProfit = grossProfit - totalExpenses;
+  const netMargin = revenue>0 ? netProfit/revenue*100 : 0;
+
+  kpiEl.innerHTML = `
+    <div class="card"><div class="label">revenue</div><div class="value">${fmtPeso(revenue)}</div><div class="sub">all-time, ${salesList.length} orders</div></div>
+    <div class="card"><div class="label">COGS</div><div class="value">${fmtPeso(cogs)}</div><div class="sub">cost of goods sold</div></div>
+    <div class="card"><div class="label">gross profit</div><div class="value">${fmtPeso(grossProfit)}</div><div class="sub">${grossMargin.toFixed(1)}% margin</div></div>
+    <div class="card ${netProfit<0?'warn':''}"><div class="label">net profit</div><div class="value">${fmtPeso(netProfit)}</div><div class="sub">${netMargin.toFixed(1)}% margin, after ${fmtPeso(totalExpenses)} expenses</div></div>
+  `;
+
+  // Cash flow: opening balance + cash actually collected from paid orders
+  // and received purchase orders paid for, minus expenses. Refunds are
+  // cancelled orders that were already marked paid.
+  const customerPayments = salesList.filter(s=>s.paymentStatus==='PAID').reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
+  const supplierPayments = purchaseOrdersList.filter(po=>po.status==='RECEIVED').reduce((a,po)=>a+(po.totalCost||0),0);
+  const refunds = salesList.filter(s=>s.orderStatus==='CANCELLED' && s.paymentStatus==='PAID').reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
+  const opening = cashSettings.openingCash || 0;
+  const currentCash = opening + customerPayments - supplierPayments - totalExpenses - refunds;
+
+  document.getElementById('cashFlowBlock').innerHTML = `
+    <div><span>Opening cash</span><span>${fmtPeso(opening)}</span></div>
+    <div><span>+ Customer payments received</span><span>${fmtPeso(customerPayments)}</span></div>
+    <div><span>− Supplier payments (received POs)</span><span>${fmtPeso(supplierPayments)}</span></div>
+    <div><span>− Operating expenses</span><span>${fmtPeso(totalExpenses)}</span></div>
+    <div><span>− Refunds</span><span>${fmtPeso(refunds)}</span></div>
+    <div style="border-top:1px solid var(--border);padding-top:9px;margin-top:4px;"><span>Current cash position</span><span>${fmtPeso(currentCash)}</span></div>
+  `;
 }
 
 // --- Products catalog + recipe editor --------------------------------------
@@ -1023,6 +1295,8 @@ async function removeRecipeItem(id){
 
 document.getElementById('todayLabel').textContent = 'chug jug ph · ' + new Date().toLocaleDateString('en-PH',{weekday:'long', year:'numeric', month:'long', day:'numeric'});
 document.getElementById('saleDate').value = todayStr();
+document.getElementById('expDate').value = todayStr();
+document.getElementById('poDate').value = todayStr();
 document.getElementById('ovMonthLabel').textContent = monthStr();
 document.getElementById('tgMonthLabel').textContent = monthStr();
 
@@ -1160,7 +1434,7 @@ function showDbErrorBanner(message){
   document.querySelector('main').prepend(banner);
   canWrite = false;
   document.querySelectorAll('button.btn, .stepbtn, input, select').forEach(el=>el.disabled = true);
-  renderInventory(); renderSales(); renderTargets(); renderGeo(); renderSuppliers(); renderCustomers();
+  renderInventory(); renderSales(); renderTargets(); renderGeo(); renderSuppliers(); renderCustomers(); renderExpenses(); renderPurchaseOrders(); renderFinance();
 }
 
 let sbClient = null;
@@ -1231,6 +1505,7 @@ async function startApp(){
     renderOverview();
     renderGeo();
     renderCustomers();
+    renderFinance();
   }, err=>console.error('sales', err));
 
   db.doc('settings/targets').onSnapshot(snap=>{
@@ -1248,6 +1523,7 @@ async function startApp(){
   db.collection('suppliers').orderBy('ts','desc').onSnapshot(snap=>{
     suppliersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderSuppliers();
+    refreshPoDropdowns();
   }, err=>console.error('suppliers', err));
 
   db.collection('customers').orderBy('ts','desc').onSnapshot(snap=>{
@@ -1267,6 +1543,7 @@ async function startApp(){
     componentsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderComponents();
     renderProducts();
+    refreshPoDropdowns();
   }, err=>console.error('components', err));
 
   db.collection('recipe_items').onSnapshot(snap=>{
@@ -1279,6 +1556,24 @@ async function startApp(){
     movementsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderMovements();
   }, err=>console.error('inventory_movements', err));
+
+  db.collection('expenses').orderBy('ts','desc').onSnapshot(snap=>{
+    expensesList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderExpenses();
+    renderFinance();
+  }, err=>console.error('expenses', err));
+
+  db.collection('purchase_orders').orderBy('ts','desc').onSnapshot(snap=>{
+    purchaseOrdersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderPurchaseOrders();
+    renderSuppliers();
+  }, err=>console.error('purchase_orders', err));
+
+  db.doc('settings/finance').onSnapshot(snap=>{
+    if(snap.exists){ cashSettings = snap.data(); }
+    document.getElementById('cashOpening').value = cashSettings.openingCash || '';
+    renderFinance();
+  }, err=>console.error('finance settings', err));
 
   document.getElementById('logoutBtn').style.display = '';
   return true;
@@ -1594,17 +1889,21 @@ async function deleteSupplier(id){
 function renderSuppliers(){
   const body = document.getElementById('suppBody');
   document.getElementById('suppCount').textContent = suppliersList.length + ' on file';
-  if(suppliersList.length===0){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No suppliers added yet.</div></td></tr>'; }
+  if(suppliersList.length===0){ body.innerHTML = '<tr><td colspan="7"><div class="empty">No suppliers added yet.</div></td></tr>'; }
   else {
-    body.innerHTML = suppliersList.map(s=>`
+    body.innerHTML = suppliersList.map(s=>{
+      const totalPurchased = purchaseOrdersList.filter(po=>po.supplierId===s.id && po.status==='RECEIVED').reduce((a,po)=>a+(po.totalCost||0),0);
+      return `
       <tr class="${s.status==='inactive'?'lowstock':''}">
         <td>${s.name}</td>
         <td>${s.contact||'—'}</td>
         <td class="mono">${s.phone||'—'}</td>
         <td>${s.item||'—'}</td>
+        <td class="mono">${fmtPeso(totalPurchased)}</td>
         <td><span class="pill ${s.status==='inactive'?'low':'ok'}">${s.status==='inactive'?'inactive':'active'}</span></td>
         <td><button class="btn ghost" onclick="deleteSupplier('${s.id}')">delete</button></td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
   }
   const activeCount = suppliersList.filter(s=>s.status!=='inactive').length;
   const itemsTracked = new Set(suppliersList.map(s=>s.item).filter(Boolean)).size;
