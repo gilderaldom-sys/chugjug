@@ -160,6 +160,10 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 .form-row{display:grid;grid-template-columns:1.4fr .8fr 1.3fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:16px;}
 .form-row .field label{display:block;font-family:var(--mono);font-size:10.5px;color:rgba(255,243,214,.5);margin-bottom:5px;}
 .form-row select,.form-row input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:#fff;font-size:13.5px;}
+.order-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;align-items:end;margin-bottom:16px;}
+.order-form .field label{display:block;font-family:var(--mono);font-size:10.5px;color:rgba(255,243,214,.5);margin-bottom:5px;}
+.order-form select,.order-form input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:#fff;font-size:13.5px;}
+.order-form .btn{grid-column:1/-1;}
 .btn{background:linear-gradient(135deg,var(--orange),var(--pink));color:#fff;font-weight:800;font-size:13px;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;}
 .btn.secondary{background:var(--glass);border:1px solid var(--border);color:#fff;}
 .btn.ghost{background:none;border:1px solid var(--border);color:rgba(255,243,214,.6);padding:6px 10px;font-size:11.5px;}
@@ -290,7 +294,11 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       </button>
       <button data-view="sales">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5h14l-1.5 9h-11z"/><path d="M6 5 7.5 2h5L14 5"/><circle cx="8" cy="17" r="1.2" fill="currentColor" stroke="none"/><circle cx="13" cy="17" r="1.2" fill="currentColor" stroke="none"/></svg>
-        <span>Sales</span>
+        <span>Orders</span>
+      </button>
+      <button data-view="products">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 2v4.2L3.5 11c-.6.8 0 2 1 2h11c1 0 1.6-1.2 1-2L13 6.2V2"/><path d="M7 2h6"/><path d="M5.5 12.5h9"/></svg>
+        <span>Products</span>
       </button>
       <button data-view="geo">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 18s6-5.5 6-10a6 6 0 0 0-12 0c0 4.5 6 10 6 10z"/><circle cx="10" cy="8" r="2.2"/></svg>
@@ -356,7 +364,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 
   <section class="view" id="v-inventory">
     <div class="panel">
-      <h2>Inventory <span class="sm">tap +/− to adjust stock, edit price inline</span></h2>
+      <h2>Finished goods <span class="sm">tap +/− to adjust stock, edit price inline</span></h2>
       <div class="table-scroll">
       <table>
         <thead><tr><th>Flavor</th><th>Stock</th><th>Low at</th><th>Price</th><th>Status</th></tr></thead>
@@ -364,30 +372,105 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       </table>
       </div>
     </div>
+    <div class="panel">
+      <h2>Add component <span class="sm">raw ingredients &amp; packaging used in recipes</span></h2>
+      <div class="order-form">
+        <div class="field"><label>Name</label><input type="text" id="compName" placeholder="Dried Pineapple"></div>
+        <div class="field"><label>Category</label>
+          <select id="compCategory"><option value="liquor">Liquor</option><option value="mixer">Mixer</option><option value="garnish">Garnish</option><option value="candy">Candy</option><option value="packaging">Packaging</option><option value="other">Other</option></select>
+        </div>
+        <div class="field"><label>Unit</label>
+          <select id="compUnit"><option value="pcs">pcs</option><option value="g">g</option><option value="ml">ml</option><option value="kg">kg</option><option value="l">l</option></select>
+        </div>
+        <div class="field"><label>Starting stock</label><input type="number" id="compStock" value="0" min="0"></div>
+        <div class="field"><label>Low at</label><input type="number" id="compLow" value="20" min="0"></div>
+        <div class="field"><label>Cost / unit</label><input type="number" id="compCost" value="0" min="0" step="0.01"></div>
+        <button class="btn" id="addComponentBtn" onclick="addComponent()">Add</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Component stock <span class="sm" id="compCount"></span></h2>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>Component</th><th>Category</th><th>Stock</th><th>Low at</th><th>Cost/unit</th><th>Status</th><th></th></tr></thead>
+        <tbody id="compBody"></tbody>
+      </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Recent stock movements <span class="sm">most recent first</span></h2>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>When</th><th>Item</th><th>Qty</th><th>Dir</th><th>Reason</th><th>Ref</th></tr></thead>
+        <tbody id="moveBody"></tbody>
+      </table>
+      </div>
+    </div>
   </section>
 
   <section class="view" id="v-sales">
+    <div class="cards" id="orderKpis"></div>
     <div class="panel">
-      <h2>Log a sale</h2>
-      <div class="form-row">
+      <h2>New order <span class="sm" id="orderNoPreview"></span></h2>
+      <div class="order-form">
+        <div class="field"><label>Customer</label><input type="text" id="orderCustomerName" list="orderCustomerList" placeholder="Juan Dela Cruz"><datalist id="orderCustomerList"></datalist></div>
+        <div class="field"><label>Phone</label><input type="text" id="orderCustomerPhone" placeholder="09XX XXX XXXX"></div>
         <div class="field"><label>Flavor</label><select id="saleFlavor"></select></div>
         <div class="field"><label>Qty</label><input type="number" id="saleQty" value="1" min="1"></div>
         <div class="field"><label>Location</label><select id="saleLocation"></select></div>
         <div class="field"><label>Date</label><input type="date" id="saleDate"></div>
-        <div class="field"><label>Revenue</label><input type="text" id="saleRevenue" readonly class="mono"></div>
-        <button class="btn" id="logSaleBtn" onclick="logSale()">Log sale</button>
+        <div class="field"><label>Payment method</label>
+          <select id="orderPayMethod"><option>Cash</option><option>GCash</option><option>Bank Transfer</option><option>Maya</option><option>COD</option><option>Other</option></select>
+        </div>
+        <div class="field"><label>Payment status</label>
+          <select id="orderPayStatus"><option value="UNPAID">Unpaid</option><option value="PARTIAL">Partial</option><option value="PAID">Paid</option></select>
+        </div>
+        <div class="field"><label>Order status</label>
+          <select id="orderStatus"><option value="NEW">New</option><option value="CONFIRMED">Confirmed</option><option value="PREPARING">Preparing</option><option value="READY">Ready</option><option value="DISPATCHED">Dispatched</option><option value="DELIVERED">Delivered</option><option value="CANCELLED">Cancelled</option></select>
+        </div>
+        <div class="field"><label>Discount</label><input type="number" id="orderDiscount" value="0" min="0"></div>
+        <div class="field"><label>Delivery fee</label><input type="number" id="orderDeliveryFee" value="0" min="0"></div>
+        <div class="field"><label>Notes</label><input type="text" id="orderNotes" placeholder="optional"></div>
+        <div class="field"><label>Total</label><input type="text" id="saleRevenue" readonly class="mono"></div>
+        <button class="btn" id="logSaleBtn" onclick="logSale()">Create order</button>
       </div>
     </div>
     <div class="panel">
-      <h2>Recent sales <span class="sm" id="salesCount"></span></h2>
+      <h2>Orders <span class="sm" id="salesCount"></span></h2>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Date</th><th>Flavor</th><th>Qty</th><th>Revenue</th><th></th></tr></thead>
+        <thead><tr><th>Order #</th><th>Date</th><th>Customer</th><th>Flavor</th><th>Qty</th><th>Total</th><th>Payment</th><th>Status</th><th></th></tr></thead>
         <tbody id="salesBody"></tbody>
       </table>
       </div>
     </div>
   </section>
+
+  <section class="view" id="v-products">
+    <div class="panel">
+      <h2>Add product <span class="sm">the five official flavors are already seeded below</span></h2>
+      <div class="order-form">
+        <div class="field"><label>Name</label><input type="text" id="prodName" placeholder="New flavor name"></div>
+        <div class="field"><label>Category</label><input type="text" id="prodCategory" value="Cocktail Kit"></div>
+        <div class="field"><label>Selling price</label><input type="number" id="prodPrice" value="0" min="0"></div>
+        <div class="field"><label>Description</label><input type="text" id="prodDesc" placeholder="optional"></div>
+        <button class="btn" id="addProductBtn" onclick="addProduct()">Add</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Product catalog <span class="sm">pricing, cost &amp; margin per flavor</span></h2>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>COGS</th><th>Gross profit</th><th>Margin</th><th>Status</th><th></th></tr></thead>
+        <tbody id="prodBody"></tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal" id="recipeModal">
+    <div class="modal-box" id="recipeModalBox" style="max-width:480px;"></div>
+  </div>
 
   <section class="view" id="v-geo">
     <div class="geo-header">
@@ -516,15 +599,15 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
         <div class="field"><label>Type</label>
           <select id="custType"><option value="retail">Retail</option><option value="reseller">Reseller</option><option value="events">Events / Bulk</option></select>
         </div>
-        <div class="field"><label>Orders so far</label><input type="number" id="custOrders" min="0" value="0"></div>
         <button class="btn" id="addCustomerBtn" onclick="addCustomer()">Add</button>
       </div>
     </div>
     <div class="panel">
       <h2>Customer directory <span class="sm" id="custCount"></span></h2>
+      <div class="sub" style="margin:-4px 0 12px;">Orders, spend and status are calculated automatically from order history — not entered by hand.</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Customer</th><th>Phone</th><th>Location</th><th>Type</th><th>Orders</th><th></th></tr></thead>
+        <thead><tr><th>Customer</th><th>Phone</th><th>Location</th><th>Type</th><th>Orders</th><th>Total spent</th><th>Favorite</th><th>Status</th><th></th></tr></thead>
         <tbody id="custBody"></tbody>
       </table>
       </div>
@@ -543,6 +626,35 @@ const FLAVORS = [
   {id:'apple', name:'Green Apple Chaos', price:899},
   {id:'grape', name:'Grape Escape', price:899},
 ];
+const FLAVOR_THEME = { blue:'#2DE2FF', straw:'#FF3F81', mango:'#FFB23D', apple:'#B8E02F', grape:'#9B5DE5' };
+
+// Starter components + recipe quantities for the five official kits. These
+// are placeholder starting points — every cost and quantity is editable in
+// the Products tab, never hard-coded assumptions about your real costs.
+const DEFAULT_COMPONENTS = [
+  {name:'Mini Liquor Bottles', category:'liquor', unit:'pcs', costPerUnit:12},
+  {name:'Blue Curacao Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
+  {name:'Strawberry Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
+  {name:'Mango Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
+  {name:'Green Apple Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
+  {name:'Grape Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
+  {name:'Gummies', category:'candy', unit:'g', costPerUnit:0.5},
+  {name:'Candy', category:'candy', unit:'pcs', costPerUnit:1},
+  {name:'Dried Lemon', category:'garnish', unit:'pcs', costPerUnit:2},
+  {name:'Dried Orange', category:'garnish', unit:'pcs', costPerUnit:2},
+  {name:'Dried Lime', category:'garnish', unit:'pcs', costPerUnit:2},
+  {name:'Chug Jug (container)', category:'packaging', unit:'pcs', costPerUnit:25},
+  {name:'Faucet', category:'packaging', unit:'pcs', costPerUnit:10},
+  {name:'Label', category:'packaging', unit:'pcs', costPerUnit:3},
+  {name:'Packaging Box', category:'packaging', unit:'pcs', costPerUnit:8},
+];
+const DEFAULT_RECIPES = {
+  blue:  [['Mini Liquor Bottles',4],['Blue Curacao Mixer',120],['Gummies',30],['Dried Lemon',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  straw: [['Mini Liquor Bottles',4],['Strawberry Mixer',120],['Gummies',30],['Dried Lemon',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  mango: [['Mini Liquor Bottles',4],['Mango Mixer',120],['Gummies',30],['Dried Orange',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  apple: [['Mini Liquor Bottles',4],['Green Apple Mixer',120],['Gummies',30],['Dried Lime',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  grape: [['Mini Liquor Bottles',4],['Grape Mixer',120],['Gummies',30],['Dried Lemon',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+};
 const HUBS = [
   {id:'ncr', name:'Metro Manila', lat:14.5995, lng:120.9842, group:'luzon', sx:127.85, sy:197.06},
   {id:'quezon', name:'Quezon City', lat:14.676, lng:121.0437, group:'luzon', sx:129.53, sy:194.91},
@@ -684,6 +796,230 @@ let salesList = [];   // array of {id, flavorId, flavorName, qty, revenue, date,
 let target = {revenueTarget:0, unitsTarget:0, month: monthStr()};
 let suppliersList = []; // {id, name, contact, phone, item, status, ts}
 let customersList = []; // {id, name, phone, location, locationName, type, orders, ts}
+let productsList = [];    // {id, name, category, colorTheme, sellingPrice, description, active, ts}
+let componentsList = [];  // {id, name, category, unit, stock, lowThreshold, costPerUnit, ts}
+let recipeItemsList = []; // {id, productId, componentId, qtyPerUnit}
+let movementsList = [];   // {id, ts, itemType, itemId, itemName, qty, direction, reason, reference, notes}
+
+// Returns the sellable catalog as {id,name,price} — from live Products once
+// loaded (so newly added products show up everywhere), falling back to the
+// FLAVORS seed list before the first load completes.
+function activeProducts(){
+  if(productsList.length){
+    return productsList.filter(p=>p.active!==false).map(p=>({
+      id:p.id, name:p.name,
+      price:(inventory[p.id] && inventory[p.id].price!=null) ? inventory[p.id].price : p.sellingPrice
+    }));
+  }
+  return FLAVORS;
+}
+
+// Re-populates the flavor dropdowns from live Products so a newly added
+// product (or a deactivated one) is reflected without a page reload.
+function refreshProductDropdowns(){
+  if(!productsList.length) return;
+  const active = activeProducts();
+  [document.getElementById('saleFlavor'), document.getElementById('geoFilterFlavor')].forEach(sel=>{
+    if(!sel) return;
+    const prevVal = sel.value;
+    const keepFirst = sel.id==='geoFilterFlavor' ? sel.querySelector('option[value="all"]') : null;
+    sel.innerHTML = '';
+    if(keepFirst) sel.appendChild(keepFirst);
+    active.forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.id; opt.textContent = p.name;
+      sel.appendChild(opt);
+    });
+    if([...sel.options].some(o=>o.value===prevVal)) sel.value = prevVal;
+  });
+}
+
+function computeCosting(productId){
+  const items = recipeItemsList.filter(r=>r.productId===productId);
+  const cogs = items.reduce((sum,r)=>{
+    const c = componentsList.find(c=>c.id===r.componentId);
+    return sum + (c ? c.costPerUnit*r.qtyPerUnit : 0);
+  }, 0);
+  const product = productsList.find(p=>p.id===productId);
+  const price = product ? product.sellingPrice : 0;
+  const grossProfit = price - cogs;
+  const margin = price>0 ? (grossProfit/price*100) : 0;
+  return { cogs, price, grossProfit, margin };
+}
+
+// --- Components (raw ingredients / packaging) -----------------------------
+async function addComponent(){
+  const name = document.getElementById('compName').value.trim();
+  if(!name) return;
+  const category = document.getElementById('compCategory').value;
+  const unit = document.getElementById('compUnit').value;
+  const stock = Math.max(0, parseFloat(document.getElementById('compStock').value)||0);
+  const lowThreshold = Math.max(0, parseFloat(document.getElementById('compLow').value)||0);
+  const costPerUnit = Math.max(0, parseFloat(document.getElementById('compCost').value)||0);
+  const btn = document.getElementById('addComponentBtn');
+  btn.disabled = true;
+  try{
+    await db.collection('components').add({name, category, unit, stock, lowThreshold, costPerUnit, ts:Date.now()});
+    document.getElementById('compName').value = '';
+    document.getElementById('compStock').value = 0;
+    document.getElementById('compLow').value = 20;
+    document.getElementById('compCost').value = 0;
+  } finally { btn.disabled = !canWrite ? true : false; }
+}
+async function setComponentStock(id, val){
+  const stock = Math.max(0, parseFloat(val)||0);
+  const comp = componentsList.find(c=>c.id===id);
+  const delta = comp ? stock - (comp.stock||0) : 0;
+  await db.doc('components/'+id).update({stock});
+  if(comp && delta !== 0){
+    await db.collection('inventory_movements').add({
+      ts:Date.now(), itemType:'component', itemId:id, itemName:comp.name,
+      qty:Math.abs(delta), direction: delta>0?'in':'out', reason:'ADJUSTMENT', reference:'', notes:''
+    });
+  }
+}
+async function setComponentLow(id, val){
+  await db.doc('components/'+id).update({lowThreshold: Math.max(0, parseFloat(val)||0)});
+}
+async function setComponentCost(id, val){
+  await db.doc('components/'+id).update({costPerUnit: Math.max(0, parseFloat(val)||0)});
+}
+async function deleteComponent(id){
+  await db.doc('components/'+id).delete();
+}
+function renderComponents(){
+  const body = document.getElementById('compBody');
+  document.getElementById('compCount').textContent = componentsList.length + ' tracked';
+  if(componentsList.length===0){ body.innerHTML = '<tr><td colspan="7"><div class="empty">No components added yet.</div></td></tr>'; return; }
+  body.innerHTML = componentsList.map(c=>{
+    const low = (c.stock||0) <= (c.lowThreshold||0);
+    return `
+      <tr class="${low?'lowstock':''}">
+        <td>${c.name}</td>
+        <td>${c.category}</td>
+        <td><div class="numcell">
+          <input type="number" value="${c.stock||0}" style="width:64px" class="mono" onchange="setComponentStock('${c.id}', this.value)">
+          <span class="sm">${c.unit}</span>
+        </div></td>
+        <td><input type="number" value="${c.lowThreshold||0}" style="width:52px" class="mono" onchange="setComponentLow('${c.id}', this.value)"></td>
+        <td class="pricecell"><input type="number" value="${c.costPerUnit||0}" step="0.01" onchange="setComponentCost('${c.id}', this.value)"></td>
+        <td><span class="pill ${low?'low':'ok'}">${low?'low stock':'ok'}</span></td>
+        <td><button class="btn ghost" onclick="deleteComponent('${c.id}')">delete</button></td>
+      </tr>`;
+  }).join('');
+}
+
+const MOVE_DIR_LABEL = { in:'+ in', out:'− out' };
+function renderMovements(){
+  const body = document.getElementById('moveBody');
+  if(!body) return;
+  if(movementsList.length===0){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No stock movements yet.</div></td></tr>'; return; }
+  body.innerHTML = movementsList.slice(0,100).map(m=>`
+    <tr>
+      <td class="mono sm">${new Date(m.ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+      <td>${m.itemName}</td>
+      <td class="mono">${m.qty}</td>
+      <td><span class="pill ${m.direction==='in'?'ok':'low'}">${MOVE_DIR_LABEL[m.direction]||m.direction}</span></td>
+      <td>${m.reason}</td>
+      <td class="mono sm">${m.reference||'—'}</td>
+    </tr>`).join('');
+}
+
+// --- Products catalog + recipe editor --------------------------------------
+async function addProduct(){
+  const name = document.getElementById('prodName').value.trim();
+  if(!name) return;
+  const category = document.getElementById('prodCategory').value.trim() || 'Cocktail Kit';
+  const sellingPrice = Math.max(0, parseFloat(document.getElementById('prodPrice').value)||0);
+  const description = document.getElementById('prodDesc').value.trim();
+  const btn = document.getElementById('addProductBtn');
+  btn.disabled = true;
+  try{
+    const res = await db.collection('products').add({name, category, colorTheme:'#2DE2FF', sellingPrice, description, active:true, ts:Date.now()});
+    await db.doc('inventory/'+res.id).set({name, price:sellingPrice, stock:0, lowThreshold:10});
+    document.getElementById('prodName').value = '';
+    document.getElementById('prodCategory').value = 'Cocktail Kit';
+    document.getElementById('prodPrice').value = 0;
+    document.getElementById('prodDesc').value = '';
+  } finally { btn.disabled = !canWrite ? true : false; }
+}
+async function toggleProductActive(id, active){
+  await db.doc('products/'+id).update({active});
+}
+function renderProducts(){
+  const body = document.getElementById('prodBody');
+  if(!body) return;
+  if(productsList.length===0){ body.innerHTML = '<tr><td colspan="8"><div class="empty">No products yet.</div></td></tr>'; return; }
+  body.innerHTML = productsList.map(p=>{
+    const costing = computeCosting(p.id);
+    const active = p.active!==false;
+    return `
+      <tr class="${!active?'lowstock':''}">
+        <td>${p.name}</td>
+        <td>${p.category||'—'}</td>
+        <td class="mono">${fmtPeso(p.sellingPrice||0)}</td>
+        <td class="mono">${fmtPeso(costing.cogs)}</td>
+        <td class="mono">${fmtPeso(costing.grossProfit)}</td>
+        <td class="mono">${costing.margin.toFixed(0)}%</td>
+        <td><span class="pill ${active?'ok':'low'}">${active?'active':'inactive'}</span></td>
+        <td>
+          <button class="btn ghost" onclick="openRecipeModal('${p.id}')">recipe</button>
+          <button class="btn ghost" onclick="toggleProductActive('${p.id}', ${!active})">${active?'deactivate':'activate'}</button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+let currentRecipeProductId = null;
+function openRecipeModal(productId){
+  currentRecipeProductId = productId;
+  document.getElementById('recipeModal').classList.add('open');
+  renderRecipeModal();
+}
+function closeRecipeModal(){
+  currentRecipeProductId = null;
+  document.getElementById('recipeModal').classList.remove('open');
+}
+function renderRecipeModal(){
+  if(!currentRecipeProductId) return;
+  const product = productsList.find(p=>p.id===currentRecipeProductId);
+  if(!product) return;
+  const items = recipeItemsList.filter(r=>r.productId===currentRecipeProductId);
+  const costing = computeCosting(currentRecipeProductId);
+  const box = document.getElementById('recipeModalBox');
+  const compOptions = componentsList.map(c=>`<option value="${c.id}">${c.name} (${c.unit})</option>`).join('');
+  box.innerHTML = `
+    <h3>${product.name} — recipe</h3>
+    <div class="order-summary">
+      ${items.map(it=>{
+        const c = componentsList.find(c=>c.id===it.componentId);
+        return `<div><span>${c?c.name:'unknown'}</span><span>${it.qtyPerUnit} ${c?c.unit:''} &nbsp;<button class="btn ghost" onclick="removeRecipeItem('${it.id}')">×</button></span></div>`;
+      }).join('') || '<div><span>No components added yet</span><span>—</span></div>'}
+    </div>
+    <div class="order-form" style="grid-template-columns:1fr 70px;">
+      <div class="field"><label>Component</label><select id="recipeCompSelect">${compOptions || '<option value="">Add a component first</option>'}</select></div>
+      <div class="field"><label>Qty/unit</label><input type="number" id="recipeQtyInput" value="1" min="0" step="0.01"></div>
+      <button class="btn" style="grid-column:1/-1;" onclick="addRecipeItem()">Add to recipe</button>
+    </div>
+    <div class="order-summary" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+      <div><span>COGS / unit</span><span>${fmtPeso(costing.cogs)}</span></div>
+      <div><span>Gross profit</span><span>${fmtPeso(costing.grossProfit)}</span></div>
+      <div><span>Margin</span><span>${costing.margin.toFixed(1)}%</span></div>
+    </div>
+    <button class="btn ghost" style="width:100%;margin-top:12px;" onclick="closeRecipeModal()">Close</button>
+  `;
+}
+async function addRecipeItem(){
+  const componentId = document.getElementById('recipeCompSelect').value;
+  const qtyPerUnit = Math.max(0, parseFloat(document.getElementById('recipeQtyInput').value)||0);
+  if(!componentId || !currentRecipeProductId) return;
+  const existing = recipeItemsList.find(r=>r.productId===currentRecipeProductId && r.componentId===componentId);
+  if(existing){ await db.doc('recipe_items/'+existing.id).update({qtyPerUnit}); }
+  else { await db.collection('recipe_items').add({productId:currentRecipeProductId, componentId, qtyPerUnit}); }
+}
+async function removeRecipeItem(id){
+  await db.doc('recipe_items/'+id).delete();
+}
 
 document.getElementById('todayLabel').textContent = 'chug jug ph · ' + new Date().toLocaleDateString('en-PH',{weekday:'long', year:'numeric', month:'long', day:'numeric'});
 document.getElementById('saleDate').value = todayStr();
@@ -799,7 +1135,8 @@ function resetGeoFilters(){
   renderGeo();
 }
 function updateSaleRevenue(){
-  const f = FLAVORS.find(x=>x.id===saleFlavorSel.value);
+  const f = activeProducts().find(x=>x.id===saleFlavorSel.value);
+  if(!f) return;
   const qty = parseInt(document.getElementById('saleQty').value)||0;
   const price = (inventory[f.id]&&inventory[f.id].price)||f.price;
   document.getElementById('saleRevenue').value = fmtPeso(qty*price);
@@ -837,11 +1174,39 @@ async function startApp(){
   canWrite = true;
 
   try{
-    // seed inventory if empty
+    // seed inventory (finished goods) if empty
     const invSnap = await db.collection('inventory').get();
     if(invSnap.empty){
       for(const f of FLAVORS){
         await db.doc('inventory/'+f.id).set({name:f.name, price:f.price, stock:24, lowThreshold:10});
+      }
+    }
+
+    // seed the product catalog from the official five flavors if empty
+    const prodSnap = await db.collection('products').get();
+    if(prodSnap.empty){
+      for(const f of FLAVORS){
+        await db.doc('products/'+f.id).set({name:f.name, category:'Cocktail Kit', colorTheme:FLAVOR_THEME[f.id]||'#2DE2FF', sellingPrice:f.price, description:'', active:true, ts:Date.now()});
+      }
+    }
+
+    // seed starter components + recipes if empty (editable placeholders)
+    const compSnap = await db.collection('components').get();
+    let seededComponents = compSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(compSnap.empty){
+      for(const c of DEFAULT_COMPONENTS){
+        const res = await db.collection('components').add({...c, stock:0, lowThreshold:20, ts:Date.now()});
+        seededComponents.push({id:res.id, ...c, stock:0, lowThreshold:20});
+      }
+      const riSnap = await db.collection('recipe_items').get();
+      if(riSnap.empty){
+        const byName = {};
+        seededComponents.forEach(c=>{ byName[c.name] = c.id; });
+        for(const [pid, items] of Object.entries(DEFAULT_RECIPES)){
+          for(const [name, qty] of items){
+            if(byName[name]) await db.collection('recipe_items').add({productId:pid, componentId:byName[name], qtyPerUnit:qty});
+          }
+        }
       }
     }
   } catch(e){
@@ -865,6 +1230,7 @@ async function startApp(){
     renderSales();
     renderOverview();
     renderGeo();
+    renderCustomers();
   }, err=>console.error('sales', err));
 
   db.doc('settings/targets').onSnapshot(snap=>{
@@ -888,6 +1254,31 @@ async function startApp(){
     customersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderCustomers();
   }, err=>console.error('customers', err));
+
+  db.collection('products').onSnapshot(snap=>{
+    productsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    refreshProductDropdowns();
+    renderProducts();
+    renderInventory();
+    updateSaleRevenue();
+  }, err=>console.error('products', err));
+
+  db.collection('components').onSnapshot(snap=>{
+    componentsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderComponents();
+    renderProducts();
+  }, err=>console.error('components', err));
+
+  db.collection('recipe_items').onSnapshot(snap=>{
+    recipeItemsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderProducts();
+    if(document.getElementById('recipeModal').classList.contains('open')) renderRecipeModal();
+  }, err=>console.error('recipe_items', err));
+
+  db.collection('inventory_movements').orderBy('ts','desc').limit(200).onSnapshot(snap=>{
+    movementsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderMovements();
+  }, err=>console.error('inventory_movements', err));
 
   document.getElementById('logoutBtn').style.display = '';
   return true;
@@ -1008,7 +1399,7 @@ async function init(){
 function renderInventory(){
   const body = document.getElementById('invBody');
   body.innerHTML = '';
-  FLAVORS.forEach(f=>{
+  activeProducts().forEach(f=>{
     const inv = inventory[f.id] || {stock:0, lowThreshold:10, price:f.price};
     const low = inv.stock <= inv.lowThreshold;
     const tr = document.createElement('tr');
@@ -1039,25 +1430,102 @@ async function setLowThreshold(id, val){
   await db.doc('inventory/'+id).update({lowThreshold: Math.max(0, parseInt(val)||0)});
 }
 async function setPrice(id, val){
-  await db.doc('inventory/'+id).update({price: Math.max(0, parseFloat(val)||0)});
+  const price = Math.max(0, parseFloat(val)||0);
+  await db.doc('inventory/'+id).update({price});
+  if(productsList.some(p=>p.id===id)) await db.doc('products/'+id).update({sellingPrice:price});
+}
+
+// Generates the next human-readable order number, e.g. CJ-2026-00007.
+function nextOrderNo(){
+  const year = new Date().getFullYear();
+  const prefix = 'CJ-'+year+'-';
+  const countThisYear = salesList.filter(s=>s.orderNo && s.orderNo.startsWith(prefix)).length;
+  return prefix + String(countThisYear+1).padStart(5,'0');
+}
+function updateOrderNoPreview(){
+  const el = document.getElementById('orderNoPreview');
+  if(el) el.textContent = 'next: ' + nextOrderNo();
+}
+
+// Looks up a customer by phone (preferred) or exact name; creates one if no
+// match is found. Returns {id, name}.
+async function findOrCreateCustomer(name, phone, region, regionName){
+  name = (name||'').trim();
+  if(!name) return null;
+  let existing = null;
+  if(phone) existing = customersList.find(c=>c.phone && c.phone===phone);
+  if(!existing) existing = customersList.find(c=>c.name.toLowerCase()===name.toLowerCase());
+  if(existing) return {id:existing.id, name:existing.name};
+  const res = await db.collection('customers').add({
+    name, phone:phone||'', location:region||'', locationName:regionName||'Unspecified',
+    type:'retail', ts:Date.now()
+  });
+  return {id:res.id, name};
+}
+
+// Deducts each recipe component's stock for `qty` units of `productId`, and
+// logs an inventory_movements row per component consumed, plus one for the
+// finished good itself. Best-effort: logs a console warning rather than
+// blocking the order if a component record is missing.
+async function deductComponentsForOrder(productId, productName, qty, orderNo){
+  await db.collection('inventory_movements').add({
+    ts:Date.now(), itemType:'product', itemId:productId, itemName:productName,
+    qty, direction:'out', reason:'SALE', reference:orderNo, notes:''
+  });
+  const items = recipeItemsList.filter(r=>r.productId===productId);
+  for(const item of items){
+    const comp = componentsList.find(c=>c.id===item.componentId);
+    if(!comp){ console.warn('recipe references missing component', item.componentId); continue; }
+    const used = item.qtyPerUnit * qty;
+    const newStock = Math.max(0, (comp.stock||0) - used);
+    await db.doc('components/'+comp.id).update({stock:newStock});
+    await db.collection('inventory_movements').add({
+      ts:Date.now(), itemType:'component', itemId:comp.id, itemName:comp.name,
+      qty:used, direction:'out', reason:'SALE', reference:orderNo, notes:''
+    });
+  }
 }
 
 async function logSale(){
-  const f = FLAVORS.find(x=>x.id===saleFlavorSel.value);
+  const f = activeProducts().find(x=>x.id===saleFlavorSel.value);
+  if(!f) return;
   const qty = Math.max(1, parseInt(document.getElementById('saleQty').value)||1);
   const date = document.getElementById('saleDate').value || todayStr();
-  const price = (inventory[f.id]&&inventory[f.id].price) || f.price;
-  const revenue = qty*price;
+  const price = (inventory[f.id]&&inventory[f.id].price!=null) ? inventory[f.id].price : f.price;
+  const discount = Math.max(0, parseFloat(document.getElementById('orderDiscount').value)||0);
+  const deliveryFee = Math.max(0, parseFloat(document.getElementById('orderDeliveryFee').value)||0);
+  const revenue = Math.max(0, qty*price - discount);
+  const total = revenue + deliveryFee;
   const region = saleLocationSel.value;
   const regionName = region ? HUBS.find(h=>h.id===region).name : 'Unspecified';
+  const custName = document.getElementById('orderCustomerName').value.trim();
+  const custPhone = document.getElementById('orderCustomerPhone').value.trim();
+  const paymentMethod = document.getElementById('orderPayMethod').value;
+  const paymentStatus = document.getElementById('orderPayStatus').value;
+  const orderStatus = document.getElementById('orderStatus').value;
+  const notes = document.getElementById('orderNotes').value.trim();
+  const orderNo = nextOrderNo();
   const btn = document.getElementById('logSaleBtn');
   btn.disabled = true;
   try{
-    await db.collection('sales').add({flavorId:f.id, flavorName:f.name, qty, unitPrice:price, revenue, date, region, regionName, ts:Date.now()});
+    const customer = custName ? await findOrCreateCustomer(custName, custPhone, region, regionName) : null;
+    await db.collection('sales').add({
+      orderNo, flavorId:f.id, flavorName:f.name, qty, unitPrice:price, revenue, total, discount, deliveryFee,
+      date, region, regionName,
+      customerId: customer ? customer.id : null, customerName: customer ? customer.name : (custName||'Walk-in'),
+      paymentMethod, paymentStatus, orderStatus, deliveryStatus:'PENDING', notes, ts:Date.now()
+    });
     const curStock = (inventory[f.id]&&inventory[f.id].stock) || 0;
     await db.doc('inventory/'+f.id).update({stock: Math.max(0, curStock - qty)});
+    await deductComponentsForOrder(f.id, f.name, qty, orderNo);
     document.getElementById('saleQty').value = 1;
+    document.getElementById('orderCustomerName').value = '';
+    document.getElementById('orderCustomerPhone').value = '';
+    document.getElementById('orderDiscount').value = 0;
+    document.getElementById('orderDeliveryFee').value = 0;
+    document.getElementById('orderNotes').value = '';
     updateSaleRevenue();
+    updateOrderNoPreview();
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 
@@ -1065,18 +1533,41 @@ async function deleteSale(id){
   await db.doc('sales/'+id).delete();
 }
 
+const PAY_PILL = { PAID:'ok', PARTIAL:'low', UNPAID:'low' };
+const ORDER_PILL = { DELIVERED:'ok', CANCELLED:'low', NEW:'ok', CONFIRMED:'ok', PREPARING:'ok', READY:'ok', DISPATCHED:'ok' };
+
 function renderSales(){
   const body = document.getElementById('salesBody');
   document.getElementById('salesCount').textContent = salesList.length + ' logged';
-  if(salesList.length===0){ body.innerHTML = '<tr><td colspan="5"><div class="empty">No sales logged yet.</div></td></tr>'; return; }
-  body.innerHTML = salesList.slice(0,50).map(s=>`
-    <tr>
-      <td class="mono">${s.date}</td>
-      <td>${s.flavorName}</td>
-      <td class="mono">${s.qty}</td>
-      <td class="mono">${fmtPeso(s.revenue)}</td>
-      <td><button class="btn ghost" onclick="deleteSale('${s.id}')">delete</button></td>
-    </tr>`).join('');
+  updateOrderNoPreview();
+  // keep the customer datalist on the order form in sync
+  const dl = document.getElementById('orderCustomerList');
+  if(dl) dl.innerHTML = customersList.map(c=>`<option value="${c.name}">`).join('');
+
+  if(salesList.length===0){ body.innerHTML = '<tr><td colspan="9"><div class="empty">No orders logged yet.</div></td></tr>'; }
+  else {
+    body.innerHTML = salesList.slice(0,80).map(s=>`
+      <tr>
+        <td class="mono">${s.orderNo||'—'}</td>
+        <td class="mono">${s.date}</td>
+        <td>${s.customerName||'Walk-in'}</td>
+        <td>${s.flavorName}</td>
+        <td class="mono">${s.qty}</td>
+        <td class="mono">${fmtPeso(s.total!=null?s.total:s.revenue)}</td>
+        <td><span class="pill ${PAY_PILL[s.paymentStatus]||'low'}">${(s.paymentStatus||'UNPAID').toLowerCase()}</span></td>
+        <td><span class="pill ${ORDER_PILL[s.orderStatus]||'ok'}">${(s.orderStatus||'NEW').toLowerCase()}</span></td>
+        <td><button class="btn ghost" onclick="deleteSale('${s.id}')">delete</button></td>
+      </tr>`).join('');
+  }
+
+  const totalRevenue = salesList.reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
+  const unpaidCount = salesList.filter(s=>s.paymentStatus!=='PAID').length;
+  const pendingCount = salesList.filter(s=>!['DELIVERED','CANCELLED'].includes(s.orderStatus)).length;
+  document.getElementById('orderKpis').innerHTML = `
+    <div class="card"><div class="label">total orders</div><div class="value">${salesList.length}</div><div class="sub">${fmtPeso(totalRevenue)} lifetime</div></div>
+    <div class="card"><div class="label">unpaid / partial</div><div class="value">${unpaidCount}</div><div class="sub">need payment follow-up</div></div>
+    <div class="card"><div class="label">in progress</div><div class="value">${pendingCount}</div><div class="sub">not yet delivered</div></div>
+  `;
 }
 
 async function addSupplier(){
@@ -1131,41 +1622,70 @@ async function addCustomer(){
   const location = document.getElementById('custLocation').value;
   const locationName = location ? HUBS.find(h=>h.id===location).name : 'Unspecified';
   const type = document.getElementById('custType').value;
-  const orders = Math.max(0, parseInt(document.getElementById('custOrders').value)||0);
   const btn = document.getElementById('addCustomerBtn');
   btn.disabled = true;
   try{
-    await db.collection('customers').add({name, phone, location, locationName, type, orders, ts:Date.now()});
+    await db.collection('customers').add({name, phone, location, locationName, type, ts:Date.now()});
     document.getElementById('custName').value = '';
     document.getElementById('custPhone').value = '';
     document.getElementById('custLocation').value = '';
     document.getElementById('custType').value = 'retail';
-    document.getElementById('custOrders').value = 0;
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteCustomer(id){
   await db.doc('customers/'+id).delete();
 }
+
+// Classifies a customer from their real order history rather than a manual
+// field: VIP (high spend or frequent), REPEAT (2+ orders), NEW (1 order,
+// recent), DORMANT (no order in 90+ days), otherwise ONE-TIME.
+function classifyCustomer(orderCount, totalSpent, lastOrderDate){
+  const daysSince = lastOrderDate ? Math.round((Date.now()-new Date(lastOrderDate).getTime())/86400000) : Infinity;
+  if(orderCount===0) return 'NEW';
+  if(daysSince>90) return 'DORMANT';
+  if(totalSpent>=10000 || orderCount>=8) return 'VIP';
+  if(orderCount>=2) return 'REPEAT';
+  return 'ONE-TIME';
+}
+const CUST_PILL = { VIP:'ok', REPEAT:'ok', NEW:'ok', 'ONE-TIME':'low', DORMANT:'low' };
+
 function renderCustomers(){
   const body = document.getElementById('custBody');
   document.getElementById('custCount').textContent = customersList.length + ' on file';
-  if(customersList.length===0){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No customers added yet.</div></td></tr>'; }
+
+  const stats = customersList.map(c=>{
+    const orders = salesList.filter(s=>s.customerId===c.id);
+    const orderCount = orders.length;
+    const totalSpent = orders.reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
+    const byFlavor = {};
+    orders.forEach(s=>{ byFlavor[s.flavorName] = (byFlavor[s.flavorName]||0)+s.qty; });
+    const favorite = Object.entries(byFlavor).sort((a,b)=>b[1]-a[1])[0];
+    const lastOrder = orders.slice().sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
+    const status = classifyCustomer(orderCount, totalSpent, lastOrder&&lastOrder.date);
+    return { c, orderCount, totalSpent, favorite: favorite?favorite[0]:'—', status };
+  });
+
+  if(customersList.length===0){ body.innerHTML = '<tr><td colspan="9"><div class="empty">No customers added yet.</div></td></tr>'; }
   else {
-    body.innerHTML = customersList.map(c=>`
+    body.innerHTML = stats.map(({c, orderCount, totalSpent, favorite, status})=>`
       <tr>
         <td>${c.name}</td>
         <td class="mono">${c.phone||'—'}</td>
         <td>${c.locationName||'Unspecified'}</td>
         <td><span class="pill ok">${c.type}</span></td>
-        <td class="mono">${c.orders||0}</td>
+        <td class="mono">${orderCount}</td>
+        <td class="mono">${fmtPeso(totalSpent)}</td>
+        <td>${favorite}</td>
+        <td><span class="pill ${CUST_PILL[status]||'ok'}">${status.toLowerCase()}</span></td>
         <td><button class="btn ghost" onclick="deleteCustomer('${c.id}')">delete</button></td>
       </tr>`).join('');
   }
   const resellers = customersList.filter(c=>c.type==='reseller').length;
-  const totalOrders = customersList.reduce((a,c)=>a+(c.orders||0),0);
+  const vipCount = stats.filter(s=>s.status==='VIP').length;
+  const totalOrders = stats.reduce((a,s)=>a+s.orderCount,0);
   document.getElementById('custKpis').innerHTML = `
     <div class="card"><div class="label">total customers</div><div class="value">${customersList.length}</div><div class="sub">on file</div></div>
-    <div class="card"><div class="label">resellers</div><div class="value">${resellers}</div><div class="sub">of ${customersList.length} customers</div></div>
+    <div class="card"><div class="label">VIP / resellers</div><div class="value">${vipCount} / ${resellers}</div><div class="sub">of ${customersList.length} customers</div></div>
     <div class="card"><div class="label">tracked orders</div><div class="value">${totalOrders}</div><div class="sub">across all customers</div></div>
   `;
 }
@@ -1218,11 +1738,12 @@ function renderOverview(){
   const avgPerDay = periodRevenue / Math.max(1, elapsedDays);
   const projectedTotal = avgPerDay * totalDays;
 
-  const lowItems = FLAVORS.filter(f=>{
+  const ap = activeProducts();
+  const lowItems = ap.filter(f=>{
     const inv = inventory[f.id];
     return inv && inv.stock <= inv.lowThreshold;
   });
-  const stockPct = lowItems.length ? Math.max(8, 100 - (lowItems.length/FLAVORS.length*100)) : 100;
+  const stockPct = lowItems.length ? Math.max(8, 100 - (lowItems.length/Math.max(1,ap.length)*100)) : 100;
 
   const card3 = ongoing ? {
     label: 'projected total', value: fmtPeso(Math.round(projectedTotal)), sub: 'at current pace',
