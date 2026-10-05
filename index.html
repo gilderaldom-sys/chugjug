@@ -324,6 +324,14 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="6.5" r="3"/><path d="M1.8 17c0-3.3 2.6-5.6 5.7-5.6s5.7 2.3 5.7 5.6"/><circle cx="15" cy="7.5" r="2.3"/><path d="M14 11.3c2.4.1 4.2 2 4.2 4.6"/></svg>
         <span>Customers</span>
       </button>
+      <button data-view="reports">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="2.5" width="14" height="15" rx="1.2"/><path d="M6.5 11.5v3M10 8.5v6M13.5 6v9"/></svg>
+        <span>Reports</span>
+      </button>
+      <button data-view="settings">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.8v2.1M10 15.1v2.1M17.2 10h-2.1M4.9 10H2.8M15.1 4.9l-1.5 1.5M6.4 13.6l-1.5 1.5M15.1 15.1l-1.5-1.5M6.4 6.4 4.9 4.9"/></svg>
+        <span>Settings</span>
+      </button>
     </nav>
   </aside>
 
@@ -339,6 +347,10 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     <main class="wrap">
 
   <section class="view active" id="v-overview">
+    <div class="panel" id="alertsPanel" style="display:none;">
+      <h2>Alerts <span class="sm">needs your attention</span></h2>
+      <div id="alertsList"></div>
+    </div>
     <div class="panel">
       <div class="ov-filter">
         <div class="seg-toggle" id="ovFilterSeg">
@@ -729,6 +741,43 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     </div>
   </section>
 
+  <section class="view" id="v-reports">
+    <div class="panel">
+      <h2>Reports <span class="sm">daily, weekly &amp; monthly, exportable</span></h2>
+      <div class="ov-filter" style="margin-bottom:16px;">
+        <div class="seg-toggle" id="reportPeriodSeg">
+          <button type="button" data-period="daily" class="active">Daily</button>
+          <button type="button" data-period="weekly">Weekly</button>
+          <button type="button" data-period="monthly">Monthly</button>
+        </div>
+      </div>
+      <div class="cards" id="reportKpis"></div>
+    </div>
+    <div class="panel">
+      <h2>Export data <span class="sm">CSV or JSON, per report</span></h2>
+      <div class="sub" style="margin:-4px 0 14px;">Exports reflect the current period selected above where relevant (Sales); other exports are always the full dataset.</div>
+      <div id="exportButtons" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-settings">
+    <div class="panel">
+      <h2>Backup &amp; restore <span class="sm">export everything, or load it back in</span></h2>
+      <div class="sub" style="margin:-4px 0 14px;">A full backup includes customers, orders, products, recipes, inventory, movements, suppliers, purchase orders, production batches, expenses, targets and settings. Importing never wipes data it doesn't touch.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <button class="btn" onclick="exportFullBackup()">Export full backup (JSON)</button>
+        <label class="btn secondary" style="cursor:pointer;">Import backup
+          <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importFullBackup(event)">
+        </label>
+      </div>
+      <div class="login-error mono" id="backupStatus" style="color:var(--lime);text-align:left;margin-top:10px;"></div>
+    </div>
+    <div class="panel">
+      <h2>Activity log <span class="sm" id="activityCount"></span></h2>
+      <div class="geo-activity" id="activityList"></div>
+    </div>
+  </section>
+
 </main>
   </div>
 </div>
@@ -905,6 +954,13 @@ function makeSupabaseDb(sb){
   };
 }
 
+// Activity log: a best-effort audit trail. Never blocks or fails the
+// action it's logging for — a logging hiccup shouldn't break an order.
+async function logActivity(message){
+  try{ await db.collection('activity_log').add({ts:Date.now(), message}); }
+  catch(e){ console.error('logActivity failed', e); }
+}
+
 let db = null, user = null, canWrite = true;
 let inventory = {};   // id -> {name, price, stock, lowThreshold}
 let salesList = [];   // array of {id, flavorId, flavorName, qty, revenue, date, ts}
@@ -920,6 +976,8 @@ let purchaseOrdersList = []; // {id, poNo, supplierId, supplierName, status, ite
 let poDraftItems = [];    // in-memory, not persisted until the PO is created
 let cashSettings = { openingCash: 0 };
 let productionBatchesList = []; // {id, batchNo, productId, productName, qty, status, releasedDate, notes, ts}
+let activityLogList = []; // {id, ts, message}
+let reportPeriod = 'daily';
 
 // Returns the sellable catalog as {id,name,price} — from live Products once
 // loaded (so newly added products show up everywhere), falling back to the
@@ -1076,6 +1134,7 @@ async function addExpense(){
     await db.collection('expenses').add({date, category, amount, paymentMethod, notes, ts:Date.now()});
     document.getElementById('expAmount').value = 0;
     document.getElementById('expNotes').value = '';
+    logActivity(`Expense added: ${category} ${fmtPeso(amount)}`);
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteExpense(id){
@@ -1177,6 +1236,7 @@ async function markPoReceived(id){
   const po = purchaseOrdersList.find(p=>p.id===id);
   if(!po || po.status==='RECEIVED') return; // never double-deduct/receive
   await receivePurchaseOrder(po);
+  logActivity(`Purchase order ${po.poNo} received from ${po.supplierName}`);
 }
 async function cancelPo(id){
   const po = purchaseOrdersList.find(p=>p.id===id);
@@ -1381,6 +1441,7 @@ async function releaseBatch(batch){
     qty:batch.qty, direction:'in', reason:'PRODUCTION', reference:batch.batchNo, notes:''
   });
   await db.doc('production_batches/'+batch.id).update({status:'RELEASED', releasedDate:todayStr()});
+  logActivity(`Batch ${batch.batchNo} released: +${batch.qty} ${batch.productName} into inventory`);
 }
 async function advanceBatch(id){
   const batch = productionBatchesList.find(b=>b.id===id);
@@ -1420,6 +1481,216 @@ function renderProduction(){
         </td>
       </tr>`;
   }).join('');
+}
+
+// --- Activity log ------------------------------------------------------------
+function renderActivityLog(){
+  const list = document.getElementById('activityList');
+  if(!list) return;
+  document.getElementById('activityCount').textContent = activityLogList.length + ' events';
+  if(activityLogList.length===0){ list.innerHTML = '<div class="empty">No activity yet.</div>'; return; }
+  list.innerHTML = activityLogList.slice(0,100).map(a=>`
+    <div class="geo-act-row">
+      <span class="adot"></span>
+      <div class="ainfo"><div class="aloc">${a.message}</div></div>
+      <div class="atime">${new Date(a.ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`).join('');
+}
+
+// --- Alerts: "what needs my attention?" -------------------------------------
+function computeAlerts(){
+  const alerts = [];
+  componentsList.forEach(c=>{
+    if((c.stock||0)<=(c.lowThreshold||0)) alerts.push({type:'LOW STOCK', message:`${c.name} is below reorder level (${c.stock||0} ${c.unit} left).`});
+  });
+  activeProducts().forEach(p=>{
+    const inv = inventory[p.id];
+    if(inv && inv.stock<=inv.lowThreshold) alerts.push({type:'LOW STOCK', message:`${p.name} finished goods are low (${inv.stock} left).`});
+  });
+  const marginTarget = cashSettings.marginTarget!=null ? cashSettings.marginTarget : 30;
+  activeProducts().forEach(p=>{
+    const costing = computeCosting(p.id);
+    if(costing.price>0 && costing.margin < marginTarget) alerts.push({type:'LOW MARGIN', message:`${p.name} margin is ${costing.margin.toFixed(1)}%, below the ${marginTarget}% target.`});
+  });
+  const unpaid = salesList.filter(s=>s.paymentStatus!=='PAID' && s.orderStatus!=='CANCELLED').length;
+  if(unpaid>0) alerts.push({type:'PENDING PAYMENT', message:`${unpaid} order${unpaid===1?'':'s'} have unpaid balances.`});
+  if(target.revenueTarget){
+    const now = new Date();
+    const dayOfMonth = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    const expectedPace = target.revenueTarget*(dayOfMonth/daysInMonth);
+    const monthRevenue = salesList.filter(s=>s.date && s.date.startsWith(monthStr())).reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
+    if(expectedPace>0 && monthRevenue < expectedPace*0.85){
+      const pctBehind = (expectedPace-monthRevenue)/expectedPace*100;
+      alerts.push({type:'TARGET', message:`You are ${pctBehind.toFixed(0)}% below pace for this month's revenue target.`});
+    }
+  }
+  const readyNotDispatched = salesList.filter(s=>s.orderStatus==='READY').length;
+  if(readyNotDispatched>0) alerts.push({type:'DELIVERY', message:`${readyNotDispatched} order${readyNotDispatched===1?'':'s'} ready but not dispatched.`});
+  const pendingPos = purchaseOrdersList.filter(po=>po.status==='ORDERED').length;
+  if(pendingPos>0) alerts.push({type:'SUPPLIER', message:`${pendingPos} purchase order${pendingPos===1?'':'s'} have not been received.`});
+  return alerts;
+}
+function renderAlerts(){
+  const panel = document.getElementById('alertsPanel');
+  const list = document.getElementById('alertsList');
+  if(!panel || !list) return;
+  const alerts = computeAlerts();
+  if(alerts.length===0){ panel.style.display='none'; return; }
+  panel.style.display='';
+  list.innerHTML = alerts.map(a=>`<div class="bar-row" style="margin-bottom:8px;"><span><span class="pill low" style="margin-right:8px;">${a.type}</span>${a.message}</span></div>`).join('');
+}
+
+// --- Reports (daily/weekly/monthly) -----------------------------------------
+function getReportRange(){
+  const today = todayStr();
+  if(reportPeriod==='weekly'){
+    const start = new Date(); start.setDate(start.getDate()-6);
+    return { start: start.toISOString().slice(0,10), end: today, label:'last 7 days' };
+  }
+  if(reportPeriod==='monthly') return { start: monthStr()+'-01', end: today, label: monthStr() };
+  return { start: today, end: today, label: 'today' };
+}
+function renderReports(){
+  const kpiEl = document.getElementById('reportKpis');
+  if(!kpiEl) return;
+  const range = getReportRange();
+  const periodSales = salesList.filter(s=>s.date && s.date>=range.start && s.date<=range.end);
+  const revenue = periodSales.reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
+  const units = periodSales.reduce((a,s)=>a+(s.qty||0),0);
+  const cogs = periodSales.reduce((a,s)=>a+computeCosting(s.flavorId).cogs*(s.qty||0),0);
+  const grossProfit = revenue-cogs;
+  const newCustomers = customersList.filter(c=>{
+    if(!c.ts) return false;
+    const d = new Date(c.ts).toISOString().slice(0,10);
+    return d>=range.start && d<=range.end;
+  }).length;
+  kpiEl.innerHTML = `
+    <div class="card"><div class="label">${range.label} orders</div><div class="value">${periodSales.length}</div><div class="sub">${units} units</div></div>
+    <div class="card"><div class="label">${range.label} revenue</div><div class="value">${fmtPeso(revenue)}</div><div class="sub">COGS ${fmtPeso(cogs)}</div></div>
+    <div class="card"><div class="label">${range.label} gross profit</div><div class="value">${fmtPeso(grossProfit)}</div><div class="sub">${revenue>0?(grossProfit/revenue*100).toFixed(1):'0'}% margin</div></div>
+    <div class="card"><div class="label">new customers</div><div class="value">${newCustomers}</div><div class="sub">in this period</div></div>
+  `;
+}
+document.querySelectorAll('#reportPeriodSeg button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    reportPeriod = btn.dataset.period;
+    document.querySelectorAll('#reportPeriodSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+    renderReports();
+  });
+});
+
+// --- CSV/JSON export ---------------------------------------------------------
+function toCSV(rows, columns){
+  const header = columns.map(c=>JSON.stringify(c.label)).join(',');
+  const lines = rows.map(r=>columns.map(c=>JSON.stringify(String(r[c.key]==null?'':r[c.key]))).join(','));
+  return [header, ...lines].join('\n');
+}
+function downloadText(filename, text, mime){
+  const blob = new Blob([text], {type:mime||'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function exportSalesCSV(){
+  const csv = toCSV(salesList, [
+    {key:'orderNo',label:'Order #'},{key:'date',label:'Date'},{key:'customerName',label:'Customer'},
+    {key:'flavorName',label:'Flavor'},{key:'qty',label:'Qty'},{key:'total',label:'Total'},
+    {key:'paymentMethod',label:'Payment method'},{key:'paymentStatus',label:'Payment status'},
+    {key:'orderStatus',label:'Order status'},{key:'deliveryStatus',label:'Delivery status'},{key:'region',label:'Region'}
+  ]);
+  downloadText(`chugjug-sales-${todayStr()}.csv`, csv, 'text/csv');
+}
+function exportInventoryCSV(){
+  const rows = activeProducts().map(p=>({ name:p.name, stock:(inventory[p.id]&&inventory[p.id].stock)||0, lowThreshold:(inventory[p.id]&&inventory[p.id].lowThreshold)||0, price:(inventory[p.id]&&inventory[p.id].price)||p.price }));
+  downloadText(`chugjug-inventory-${todayStr()}.csv`, toCSV(rows, [{key:'name',label:'Flavor'},{key:'stock',label:'Stock'},{key:'lowThreshold',label:'Low at'},{key:'price',label:'Price'}]), 'text/csv');
+}
+function exportCustomersCSV(){
+  const stats = computeCustomerStats();
+  const rows = stats.map(s=>({ name:s.c.name, phone:s.c.phone, location:s.c.locationName, type:s.c.type, orders:s.orderCount, totalSpent:s.totalSpent, favorite:s.favorite, status:s.status }));
+  downloadText(`chugjug-customers-${todayStr()}.csv`, toCSV(rows, [{key:'name',label:'Customer'},{key:'phone',label:'Phone'},{key:'location',label:'Location'},{key:'type',label:'Type'},{key:'orders',label:'Orders'},{key:'totalSpent',label:'Total spent'},{key:'favorite',label:'Favorite'},{key:'status',label:'Status'}]), 'text/csv');
+}
+function exportExpensesCSV(){
+  downloadText(`chugjug-expenses-${todayStr()}.csv`, toCSV(expensesList, [{key:'date',label:'Date'},{key:'category',label:'Category'},{key:'amount',label:'Amount'},{key:'paymentMethod',label:'Payment method'},{key:'notes',label:'Notes'}]), 'text/csv');
+}
+function exportSuppliersCSV(){
+  downloadText(`chugjug-suppliers-${todayStr()}.csv`, toCSV(suppliersList, [{key:'name',label:'Supplier'},{key:'contact',label:'Contact'},{key:'phone',label:'Phone'},{key:'item',label:'Supplies'},{key:'status',label:'Status'}]), 'text/csv');
+}
+function exportFinanceJSON(){
+  const revenue = salesList.reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
+  const cogs = salesList.reduce((a,s)=>a+computeCosting(s.flavorId).cogs*(s.qty||0),0);
+  const totalExpenses = expensesList.reduce((a,e)=>a+(e.amount||0),0);
+  const summary = { revenue, cogs, grossProfit: revenue-cogs, totalExpenses, netProfit: revenue-cogs-totalExpenses, generatedAt: new Date().toISOString() };
+  downloadText(`chugjug-finance-${todayStr()}.json`, JSON.stringify(summary, null, 2), 'application/json');
+}
+function renderExportButtons(){
+  const box = document.getElementById('exportButtons');
+  if(!box) return;
+  box.innerHTML = `
+    <button class="btn secondary" onclick="exportSalesCSV()">Sales (CSV)</button>
+    <button class="btn secondary" onclick="exportInventoryCSV()">Inventory (CSV)</button>
+    <button class="btn secondary" onclick="exportCustomersCSV()">Customers (CSV)</button>
+    <button class="btn secondary" onclick="exportSuppliersCSV()">Suppliers (CSV)</button>
+    <button class="btn secondary" onclick="exportExpensesCSV()">Expenses (CSV)</button>
+    <button class="btn secondary" onclick="exportFinanceJSON()">Finance summary (JSON)</button>
+  `;
+}
+
+// --- Backup / restore ---------------------------------------------------------
+function exportFullBackup(){
+  const backup = {
+    exportedAt: new Date().toISOString(),
+    inventory, sales:salesList, suppliers:suppliersList, customers:customersList,
+    products:productsList, components:componentsList, recipe_items:recipeItemsList,
+    inventory_movements:movementsList, expenses:expensesList, purchase_orders:purchaseOrdersList,
+    production_batches:productionBatchesList, activity_log:activityLogList,
+    settings: { targets: target, finance: cashSettings }
+  };
+  downloadText(`chugjug-backup-${todayStr()}.json`, JSON.stringify(backup, null, 2), 'application/json');
+  logActivity('Full data backup exported');
+}
+async function importFullBackup(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('backupStatus');
+  statusEl.style.color = 'var(--cyan)';
+  statusEl.textContent = 'Reading backup file...';
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const collectionKeys = ['sales','suppliers','customers','products','components','recipe_items','inventory_movements','expenses','purchase_orders','production_batches','activity_log'];
+    let count = 0;
+    for(const key of collectionKeys){
+      const rows = data[key];
+      if(!Array.isArray(rows)) continue;
+      for(const row of rows){
+        if(!row || !row.id) continue;
+        const copy = {...row}; delete copy.id;
+        await db.doc(key+'/'+row.id).set(copy);
+        count++;
+      }
+    }
+    if(data.inventory && typeof data.inventory==='object'){
+      for(const [id, row] of Object.entries(data.inventory)){
+        await db.doc('inventory/'+id).set(row);
+        count++;
+      }
+    }
+    if(data.settings){
+      if(data.settings.targets) await db.doc('settings/targets').set(data.settings.targets);
+      if(data.settings.finance) await db.doc('settings/finance').set(data.settings.finance);
+    }
+    statusEl.style.color = 'var(--lime)';
+    statusEl.textContent = `Import complete — restored ${count} records.`;
+    logActivity(`Backup imported (${count} records)`);
+  } catch(e){
+    statusEl.style.color = 'var(--pink)';
+    statusEl.textContent = 'Import failed: ' + (e.message||'invalid file.');
+  } finally {
+    evt.target.value = '';
+  }
 }
 
 // --- Products catalog + recipe editor --------------------------------------
@@ -1659,7 +1930,7 @@ function showDbErrorBanner(message){
   document.querySelector('main').prepend(banner);
   canWrite = false;
   document.querySelectorAll('button.btn, .stepbtn, input, select').forEach(el=>el.disabled = true);
-  renderInventory(); renderSales(); renderTargets(); renderGeo(); renderSuppliers(); renderCustomers(); renderExpenses(); renderPurchaseOrders(); renderFinance(); renderFulfillment(); renderFlavorAnalytics(); renderProduction();
+  renderInventory(); renderSales(); renderTargets(); renderGeo(); renderSuppliers(); renderCustomers(); renderExpenses(); renderPurchaseOrders(); renderFinance(); renderFulfillment(); renderFlavorAnalytics(); renderProduction(); renderActivityLog(); renderAlerts(); renderReports();
 }
 
 let sbClient = null;
@@ -1722,6 +1993,7 @@ async function startApp(){
     renderInventory();
     renderOverview();
     updateSaleRevenue();
+    renderAlerts();
   }, err=>console.error('inventory', err));
 
   db.collection('sales').orderBy('ts','desc').limit(500).onSnapshot(snap=>{
@@ -1733,6 +2005,8 @@ async function startApp(){
     renderFinance();
     renderFulfillment();
     renderFlavorAnalytics();
+    renderAlerts();
+    renderReports();
   }, err=>console.error('sales', err));
 
   db.doc('settings/targets').onSnapshot(snap=>{
@@ -1745,6 +2019,7 @@ async function startApp(){
     document.getElementById('tgUnits').value = target.unitsTarget || '';
     renderOverview();
     renderTargets();
+    renderAlerts();
   }, err=>console.error('targets', err));
 
   db.collection('suppliers').orderBy('ts','desc').onSnapshot(snap=>{
@@ -1756,6 +2031,7 @@ async function startApp(){
   db.collection('customers').orderBy('ts','desc').onSnapshot(snap=>{
     customersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderCustomers();
+    renderReports();
   }, err=>console.error('customers', err));
 
   db.collection('products').onSnapshot(snap=>{
@@ -1766,6 +2042,7 @@ async function startApp(){
     updateSaleRevenue();
     refreshBatchDropdown();
     renderFlavorAnalytics();
+    renderAlerts();
   }, err=>console.error('products', err));
 
   db.collection('components').onSnapshot(snap=>{
@@ -1773,6 +2050,7 @@ async function startApp(){
     renderComponents();
     renderProducts();
     refreshPoDropdowns();
+    renderAlerts();
   }, err=>console.error('components', err));
 
   db.collection('recipe_items').onSnapshot(snap=>{
@@ -1796,6 +2074,7 @@ async function startApp(){
     purchaseOrdersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderPurchaseOrders();
     renderSuppliers();
+    renderAlerts();
   }, err=>console.error('purchase_orders', err));
 
   db.doc('settings/finance').onSnapshot(snap=>{
@@ -1809,6 +2088,13 @@ async function startApp(){
     renderProduction();
   }, err=>console.error('production_batches', err));
 
+  db.collection('activity_log').orderBy('ts','desc').limit(200).onSnapshot(snap=>{
+    activityLogList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderActivityLog();
+  }, err=>console.error('activity_log', err));
+
+  renderExportButtons();
+  renderReports();
   document.getElementById('logoutBtn').style.display = '';
   return true;
 }
@@ -2057,14 +2343,19 @@ async function logSale(){
     document.getElementById('orderNotes').value = '';
     updateSaleRevenue();
     updateOrderNoPreview();
+    logActivity(`Order ${orderNo} created (${qty} × ${f.name})`);
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 
 async function updateOrderStatus(id, val){
   await db.doc('sales/'+id).update({orderStatus: val});
+  const s = salesList.find(x=>x.id===id);
+  logActivity(`Order ${s?s.orderNo:id} status set to ${val}`);
 }
 async function updateDeliveryStatus(id, val){
   await db.doc('sales/'+id).update({deliveryStatus: val});
+  const s = salesList.find(x=>x.id===id);
+  logActivity(`Order ${s?s.orderNo:id} delivery status set to ${val}`);
 }
 const DELIVERY_PILL = { PENDING:'low', OUT_FOR_DELIVERY:'low', DELIVERED:'ok', FAILED:'low' };
 function renderFulfillment(){
@@ -2147,6 +2438,7 @@ async function addSupplier(){
     document.getElementById('suppPhone').value = '';
     document.getElementById('suppItem').value = '';
     document.getElementById('suppStatus').value = 'active';
+    logActivity(`Supplier added: ${name}`);
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteSupplier(id){
@@ -2195,6 +2487,7 @@ async function addCustomer(){
     document.getElementById('custPhone').value = '';
     document.getElementById('custLocation').value = '';
     document.getElementById('custType').value = 'retail';
+    logActivity(`Customer added: ${name}`);
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteCustomer(id){
@@ -2296,6 +2589,7 @@ async function saveTarget(){
   const revenueTarget = Math.max(0, parseFloat(document.getElementById('tgRevenue').value)||0);
   const unitsTarget = Math.max(0, parseInt(document.getElementById('tgUnits').value)||0);
   await db.doc('settings/targets').set({revenueTarget, unitsTarget, month: monthStr()});
+  logActivity(`Targets updated for ${monthStr()}: ${fmtPeso(revenueTarget)} revenue, ${unitsTarget} units`);
 }
 
 function hudGauge(pct, color, size){
