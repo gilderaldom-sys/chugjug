@@ -154,6 +154,13 @@ main{padding:32px 0 60px;min-width:0;}
 .table-scroll table{min-width:460px;}
 
 .modal{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(5,9,18,.72);backdrop-filter:blur(4px);}
+
+.toast-stack{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:90;display:flex;flex-direction:column;gap:8px;align-items:center;width:calc(100% - 32px);max-width:420px;pointer-events:none;}
+.toast{pointer-events:auto;background:rgba(11,18,32,.96);border:1px solid var(--border);border-left:4px solid var(--pink);border-radius:8px;padding:11px 16px;font-size:13px;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:100%;word-break:break-word;animation:toastIn .2s ease;}
+.toast.ok{border-left-color:var(--lime);}
+.toast.info{border-left-color:var(--cyan);}
+@keyframes toastIn{0%{opacity:0;transform:translateY(8px);}100%{opacity:1;transform:translateY(0);}}
+@media (max-width:820px){ .toast-stack{bottom:calc(70px + env(safe-area-inset-bottom,0px));} }
 .modal.open{display:flex;}
 .modal-box{background:rgba(11,18,32,.97);border:1px solid var(--border);border-radius:14px;padding:22px;width:100%;max-width:360px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5);}
 .modal-box h3{font-family:var(--mono);font-size:16px;color:#fff;letter-spacing:.02em;margin-bottom:4px;}
@@ -638,6 +645,8 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     <div class="modal-box" id="geoDetailBox"></div>
   </div>
 
+  <div class="toast-stack" id="toastStack"></div>
+
   <section class="view" id="v-targets">
     <div class="panel">
       <h2>Set this month's target <span class="sm" id="tgMonthLabel"></span></h2>
@@ -654,10 +663,11 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     <div class="cards" id="suppKpis"></div>
     <div class="panel">
       <h2>Add supplier <span class="sm">track who supplies what</span></h2>
-      <div class="form-row">
+      <div class="order-form">
         <div class="field"><label>Supplier name</label><input type="text" id="suppName" placeholder="Manila Liquor Trading"></div>
         <div class="field"><label>Contact</label><input type="text" id="suppContact" placeholder="Juan Dela Cruz"></div>
         <div class="field"><label>Phone</label><input type="text" id="suppPhone" placeholder="09XX XXX XXXX"></div>
+        <div class="field"><label>Email</label><input type="email" id="suppEmail" placeholder="supplier@email.com"></div>
         <div class="field"><label>Supplies</label><input type="text" id="suppItem" placeholder="Mini liquor bottles"></div>
         <div class="field"><label>Status</label>
           <select id="suppStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select>
@@ -669,7 +679,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <h2>Supplier directory <span class="sm" id="suppCount"></span></h2>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Supplier</th><th>Contact</th><th>Phone</th><th>Supplies</th><th>Total purchased</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Supplier</th><th>Contact</th><th>Phone</th><th>Email</th><th>Supplies</th><th>Total purchased</th><th>Status</th><th></th></tr></thead>
         <tbody id="suppBody"></tbody>
       </table>
       </div>
@@ -741,9 +751,10 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     <div class="cards" id="custKpis"></div>
     <div class="panel">
       <h2>Add customer <span class="sm">build your buyer directory</span></h2>
-      <div class="form-row">
+      <div class="order-form">
         <div class="field"><label>Customer name</label><input type="text" id="custName" placeholder="Juan Dela Cruz"></div>
         <div class="field"><label>Phone</label><input type="text" id="custPhone" placeholder="09XX XXX XXXX"></div>
+        <div class="field"><label>Email</label><input type="email" id="custEmail" placeholder="juan@email.com"></div>
         <div class="field"><label>Location</label><select id="custLocation"></select></div>
         <div class="field"><label>Type</label>
           <select id="custType"><option value="retail">Retail</option><option value="reseller">Reseller</option><option value="events">Events / Bulk</option></select>
@@ -756,7 +767,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <div class="sub" style="margin:-4px 0 12px;">Orders, spend and status are calculated automatically from order history — not entered by hand.</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Customer</th><th>Phone</th><th>Location</th><th>Type</th><th>Orders</th><th>Total spent</th><th>Favorite</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Customer</th><th>Phone</th><th>Email</th><th>Location</th><th>Type</th><th>Orders</th><th>Total spent</th><th>Favorite</th><th>Status</th><th></th></tr></thead>
         <tbody id="custBody"></tbody>
       </table>
       </div>
@@ -980,6 +991,26 @@ function makeSupabaseDb(sb){
   };
 }
 
+// Visible toast notifications — so a failed save (bad connection, a
+// rejected write, a schema mismatch) is never silent. Writes that used to
+// fail with nothing shown to the user should all route their errors here.
+function toast(message, kind){
+  const stack = document.getElementById('toastStack');
+  if(!stack){ console.error('toast:', message); return; }
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' '+kind : '');
+  el.textContent = message;
+  stack.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, kind==='ok' ? 3200 : 5500);
+}
+function friendlyError(e){
+  const msg = (e && (e.message || e.error_description || e.details)) || '';
+  if(/column .* does not exist/i.test(msg)) return 'Couldn\'t save — the database is missing a field this form needs. (' + msg + ')';
+  if(/permission denied|rls/i.test(msg)) return 'Couldn\'t save — you don\'t have permission to write this. (' + msg + ')';
+  if(/Failed to fetch|NetworkError|network/i.test(msg)) return 'Couldn\'t reach the database. Check your connection and try again.';
+  return msg || 'Something went wrong and this wasn\'t saved. Please try again.';
+}
+
 // Activity log: a best-effort audit trail. Never blocks or fails the
 // action it's logging for — a logging hiccup shouldn't break an order.
 async function logActivity(message){
@@ -1085,6 +1116,10 @@ async function addComponent(){
     document.getElementById('compStock').value = 0;
     document.getElementById('compLow').value = 20;
     document.getElementById('compCost').value = 0;
+    toast(`Component added: ${name}.`, 'ok');
+  } catch(e){
+    console.error('addComponent failed', e);
+    toast(friendlyError(e));
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function setComponentStock(id, val){
@@ -1635,14 +1670,14 @@ function exportInventoryCSV(){
 }
 function exportCustomersCSV(){
   const stats = computeCustomerStats();
-  const rows = stats.map(s=>({ name:s.c.name, phone:s.c.phone, location:s.c.locationName, type:s.c.type, orders:s.orderCount, totalSpent:s.totalSpent, favorite:s.favorite, status:s.status }));
-  downloadText(`chugjug-customers-${todayStr()}.csv`, toCSV(rows, [{key:'name',label:'Customer'},{key:'phone',label:'Phone'},{key:'location',label:'Location'},{key:'type',label:'Type'},{key:'orders',label:'Orders'},{key:'totalSpent',label:'Total spent'},{key:'favorite',label:'Favorite'},{key:'status',label:'Status'}]), 'text/csv');
+  const rows = stats.map(s=>({ name:s.c.name, phone:s.c.phone, email:s.c.email||'', location:s.c.locationName, type:s.c.type, orders:s.orderCount, totalSpent:s.totalSpent, favorite:s.favorite, status:s.status }));
+  downloadText(`chugjug-customers-${todayStr()}.csv`, toCSV(rows, [{key:'name',label:'Customer'},{key:'phone',label:'Phone'},{key:'email',label:'Email'},{key:'location',label:'Location'},{key:'type',label:'Type'},{key:'orders',label:'Orders'},{key:'totalSpent',label:'Total spent'},{key:'favorite',label:'Favorite'},{key:'status',label:'Status'}]), 'text/csv');
 }
 function exportExpensesCSV(){
   downloadText(`chugjug-expenses-${todayStr()}.csv`, toCSV(expensesList, [{key:'date',label:'Date'},{key:'category',label:'Category'},{key:'amount',label:'Amount'},{key:'paymentMethod',label:'Payment method'},{key:'notes',label:'Notes'}]), 'text/csv');
 }
 function exportSuppliersCSV(){
-  downloadText(`chugjug-suppliers-${todayStr()}.csv`, toCSV(suppliersList, [{key:'name',label:'Supplier'},{key:'contact',label:'Contact'},{key:'phone',label:'Phone'},{key:'item',label:'Supplies'},{key:'status',label:'Status'}]), 'text/csv');
+  downloadText(`chugjug-suppliers-${todayStr()}.csv`, toCSV(suppliersList, [{key:'name',label:'Supplier'},{key:'contact',label:'Contact'},{key:'phone',label:'Phone'},{key:'email',label:'Email'},{key:'item',label:'Supplies'},{key:'status',label:'Status'}]), 'text/csv');
 }
 function exportFinanceJSON(){
   const revenue = salesList.reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
@@ -1735,6 +1770,10 @@ async function addProduct(){
     document.getElementById('prodCategory').value = 'Cocktail Kit';
     document.getElementById('prodPrice').value = 0;
     document.getElementById('prodDesc').value = '';
+    toast(`Product added: ${name}.`, 'ok');
+  } catch(e){
+    console.error('addProduct failed', e);
+    toast(friendlyError(e));
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function toggleProductActive(id, active){
@@ -2357,7 +2396,7 @@ async function deductComponentsForOrder(productId, productName, qty, orderNo){
 
 async function logSale(){
   const f = activeProducts().find(x=>x.id===saleFlavorSel.value);
-  if(!f) return;
+  if(!f){ toast('Pick a flavor before creating the order.'); return; }
   const qty = Math.max(1, parseInt(document.getElementById('saleQty').value)||1);
   const date = document.getElementById('saleDate').value || todayStr();
   const price = (inventory[f.id]&&inventory[f.id].price!=null) ? inventory[f.id].price : f.price;
@@ -2398,6 +2437,10 @@ async function logSale(){
     updateSaleRevenue();
     updateOrderNoPreview();
     logActivity(`Order ${orderNo} created (${qty} × ${f.name})`);
+    toast(`Order ${orderNo} created.`, 'ok');
+  } catch(e){
+    console.error('logSale failed', e);
+    toast(friendlyError(e));
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 
@@ -2481,18 +2524,24 @@ async function addSupplier(){
   if(!name) return;
   const contact = document.getElementById('suppContact').value.trim();
   const phone = document.getElementById('suppPhone').value.trim();
+  const email = document.getElementById('suppEmail').value.trim();
   const item = document.getElementById('suppItem').value.trim();
   const status = document.getElementById('suppStatus').value;
   const btn = document.getElementById('addSupplierBtn');
   btn.disabled = true;
   try{
-    await db.collection('suppliers').add({name, contact, phone, item, status, ts:Date.now()});
+    await db.collection('suppliers').add({name, contact, phone, email, item, status, ts:Date.now()});
     document.getElementById('suppName').value = '';
     document.getElementById('suppContact').value = '';
     document.getElementById('suppPhone').value = '';
+    document.getElementById('suppEmail').value = '';
     document.getElementById('suppItem').value = '';
     document.getElementById('suppStatus').value = 'active';
     logActivity(`Supplier added: ${name}`);
+    toast(`Supplier added: ${name}.`, 'ok');
+  } catch(e){
+    console.error('addSupplier failed', e);
+    toast(friendlyError(e));
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteSupplier(id){
@@ -2501,7 +2550,7 @@ async function deleteSupplier(id){
 function renderSuppliers(){
   const body = document.getElementById('suppBody');
   document.getElementById('suppCount').textContent = suppliersList.length + ' on file';
-  if(suppliersList.length===0){ body.innerHTML = '<tr><td colspan="7"><div class="empty">No suppliers added yet.</div></td></tr>'; }
+  if(suppliersList.length===0){ body.innerHTML = '<tr><td colspan="8"><div class="empty">No suppliers added yet.</div></td></tr>'; }
   else {
     body.innerHTML = suppliersList.map(s=>{
       const totalPurchased = purchaseOrdersList.filter(po=>po.supplierId===s.id && po.status==='RECEIVED').reduce((a,po)=>a+(po.totalCost||0),0);
@@ -2510,6 +2559,7 @@ function renderSuppliers(){
         <td>${s.name}</td>
         <td>${s.contact||'—'}</td>
         <td class="mono">${s.phone||'—'}</td>
+        <td>${s.email?`<a href="mailto:${s.email}" class="mono" style="color:var(--cyan);">${s.email}</a>`:'—'}</td>
         <td>${s.item||'—'}</td>
         <td class="mono">${fmtPeso(totalPurchased)}</td>
         <td><span class="pill ${s.status==='inactive'?'low':'ok'}">${s.status==='inactive'?'inactive':'active'}</span></td>
@@ -2530,18 +2580,24 @@ async function addCustomer(){
   const name = document.getElementById('custName').value.trim();
   if(!name) return;
   const phone = document.getElementById('custPhone').value.trim();
+  const email = document.getElementById('custEmail').value.trim();
   const location = document.getElementById('custLocation').value;
   const locationName = location ? HUBS.find(h=>h.id===location).name : 'Unspecified';
   const type = document.getElementById('custType').value;
   const btn = document.getElementById('addCustomerBtn');
   btn.disabled = true;
   try{
-    await db.collection('customers').add({name, phone, location, locationName, type, ts:Date.now()});
+    await db.collection('customers').add({name, phone, email, location, locationName, type, ts:Date.now()});
     document.getElementById('custName').value = '';
     document.getElementById('custPhone').value = '';
+    document.getElementById('custEmail').value = '';
     document.getElementById('custLocation').value = '';
     document.getElementById('custType').value = 'retail';
     logActivity(`Customer added: ${name}`);
+    toast(`Customer added: ${name}.`, 'ok');
+  } catch(e){
+    console.error('addCustomer failed', e);
+    toast(friendlyError(e));
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteCustomer(id){
@@ -2582,12 +2638,13 @@ function renderCustomers(){
 
   const stats = computeCustomerStats();
 
-  if(customersList.length===0){ body.innerHTML = '<tr><td colspan="9"><div class="empty">No customers added yet.</div></td></tr>'; }
+  if(customersList.length===0){ body.innerHTML = '<tr><td colspan="10"><div class="empty">No customers added yet.</div></td></tr>'; }
   else {
     body.innerHTML = stats.map(({c, orderCount, totalSpent, favorite, status})=>`
       <tr>
         <td>${c.name}</td>
         <td class="mono">${c.phone||'—'}</td>
+        <td>${c.email?`<a href="mailto:${c.email}" class="mono" style="color:var(--cyan);">${c.email}</a>`:'—'}</td>
         <td>${c.locationName||'Unspecified'}</td>
         <td><span class="pill ok">${c.type}</span></td>
         <td class="mono">${orderCount}</td>
