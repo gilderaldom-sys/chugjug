@@ -1358,37 +1358,38 @@ function buildPurchaseOrderDocHTML(po){
 <html><head><meta charset="utf-8"><title>${po.poNo} — Purchase Order</title>
 <style>
   *{box-sizing:border-box;}
-  body{font-family:'Segoe UI',Arial,sans-serif;color:#1c2430;margin:0;padding:40px 48px;background:#fff;}
-  .po-top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;border-bottom:1px solid #e2e5ea;padding-bottom:20px;margin-bottom:20px;}
+  :root{ --brand-navy:#050912; --brand-orange:#FF6B35; --brand-pink:#FF3F81; --brand-yellow:#FFD93B; --brand-lime:#B8E02F; }
+  body{font-family:'Segoe UI',Arial,sans-serif;color:var(--brand-navy);margin:0;padding:40px 48px;background:#fff;}
+  .po-top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;border-bottom:3px solid transparent;border-image:linear-gradient(90deg,var(--brand-pink),var(--brand-orange),var(--brand-yellow),var(--brand-lime)) 1;padding-bottom:20px;margin-bottom:20px;}
   .po-biz{display:flex;gap:14px;align-items:flex-start;}
   .po-biz img{width:64px;height:64px;border-radius:12px;object-fit:cover;}
-  .po-biz h1{font-size:22px;margin:0 0 4px;}
+  .po-biz h1{font-size:22px;margin:0 0 4px;color:var(--brand-navy);}
   .po-biz p{font-size:12.5px;margin:2px 0;color:#333;}
-  .po-biz b{color:#1c2430;}
+  .po-biz b{color:var(--brand-navy);}
   .po-head-right{text-align:right;}
-  .po-head-right h2{font-size:30px;color:#f0a500;margin:0 0 10px;letter-spacing:.02em;}
+  .po-head-right h2{font-size:30px;color:var(--brand-pink);margin:0 0 10px;letter-spacing:.02em;font-weight:800;}
   .po-meta-row{font-size:12.5px;margin:4px 0;}
   .po-meta-row .lbl{color:#5a6475;margin-right:10px;}
-  .po-meta-row b{font-family:'Courier New',monospace;}
+  .po-meta-row b{font-family:'Courier New',monospace;color:var(--brand-navy);}
   .po-boxes{display:flex;gap:20px;margin-bottom:24px;}
-  .po-box{flex:1;background:#f7f8fa;border:1px solid #e2e5ea;border-radius:8px;padding:16px 18px;}
-  .po-box h3{font-size:12px;letter-spacing:.06em;color:#5a6475;margin:0 0 10px;border-bottom:1px solid #e2e5ea;padding-bottom:8px;}
+  .po-box{flex:1;background:#f7f8fa;border:1px solid #e2e5ea;border-left:3px solid var(--brand-yellow);border-radius:8px;padding:16px 18px;}
+  .po-box h3{font-size:12px;letter-spacing:.06em;color:var(--brand-pink);margin:0 0 10px;border-bottom:1px solid #e2e5ea;padding-bottom:8px;}
   .po-box p{font-size:13px;margin:4px 0;}
   table.po-items{width:100%;border-collapse:collapse;margin-bottom:22px;}
-  table.po-items thead th{background:#1c2430;color:#fff;text-align:left;font-size:11.5px;letter-spacing:.04em;padding:10px 12px;}
+  table.po-items thead th{background:var(--brand-navy);color:#fff;text-align:left;font-size:11.5px;letter-spacing:.04em;padding:10px 12px;}
   table.po-items td{padding:10px 12px;font-size:13px;border-bottom:1px solid #eceff2;}
   table.po-items tbody tr:nth-child(even){background:#f7f8fa;}
   .po-num{text-align:right;font-family:'Courier New',monospace;}
-  .po-item-no{color:#8893a6;}
+  .po-item-no{color:var(--brand-orange);font-weight:700;}
   .po-bottom{display:flex;gap:24px;justify-content:space-between;}
-  .po-terms{flex:1.3;background:#f7f8fa;border:1px solid #e2e5ea;border-radius:8px;padding:16px 18px;}
-  .po-terms h3{font-size:12.5px;margin:0 0 8px;}
+  .po-terms{flex:1.3;background:#f7f8fa;border:1px solid #e2e5ea;border-left:3px solid var(--brand-lime);border-radius:8px;padding:16px 18px;}
+  .po-terms h3{font-size:12.5px;margin:0 0 8px;color:var(--brand-navy);}
   .po-terms ul{margin:0;padding-left:18px;font-size:12px;color:#333;line-height:1.5;}
   .po-totals{flex:1;}
   .po-totals-row{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;color:#444;}
-  .po-totals-row.total{border-top:2px solid #1c2430;margin-top:6px;padding-top:10px;font-size:15px;font-weight:700;color:#1c2430;}
+  .po-totals-row.total{border-top:2px solid var(--brand-navy);margin-top:6px;padding-top:10px;font-size:15px;font-weight:700;color:var(--brand-pink);}
   .po-sign{display:flex;gap:60px;margin-top:50px;}
-  .po-sign div{flex:1;border-top:1px solid #1c2430;padding-top:8px;text-align:center;font-size:12px;}
+  .po-sign div{flex:1;border-top:1px solid var(--brand-navy);padding-top:8px;text-align:center;font-size:12px;}
   .po-footer{margin-top:40px;padding-top:14px;border-top:1px solid #e2e5ea;display:flex;justify-content:space-between;font-size:11px;color:#8893a6;}
   @media print{ body{padding:20px 28px;} }
 </style></head>
