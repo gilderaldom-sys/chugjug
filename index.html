@@ -2954,6 +2954,11 @@ async function confirmOnlineOrder(id){
       await deductComponentsForOrder(f.id, it.name||f.name, qty, orderNo);
     }
     await db.doc('online_orders/'+id).update({status:'CONFIRMED', confirmedOrderNo:orderNo});
+    // Patch local state immediately rather than waiting on the realtime
+    // round-trip (and in case realtime isn't wired up for this table) so the
+    // panel/badge update the instant the write succeeds.
+    ord.status = 'CONFIRMED'; ord.confirmedOrderNo = orderNo;
+    renderOnlineOrders();
     logActivity(`Website order confirmed as ${orderNo} (${ord.customerName||'customer'})`);
     toast(`Confirmed as ${orderNo}.`, 'ok');
   } catch(e){
@@ -2966,6 +2971,9 @@ async function markOnlineOrderPaid(id){
   if(blockIfNoEdit('sales')) return;
   try{
     await db.doc('online_orders/'+id).update({paymentStatus:'PAID'});
+    const ord = onlineOrdersList.find(o=>o.id===id);
+    if(ord) ord.paymentStatus = 'PAID';
+    renderOnlineOrders();
     toast('Marked as paid.', 'ok');
   } catch(e){
     console.error('markOnlineOrderPaid failed', e);
@@ -2977,6 +2985,9 @@ async function declineOnlineOrder(id){
   if(blockIfNoEdit('sales')) return;
   try{
     await db.doc('online_orders/'+id).update({status:'DECLINED'});
+    const ord = onlineOrdersList.find(o=>o.id===id);
+    if(ord) ord.status = 'DECLINED';
+    renderOnlineOrders();
     logActivity('Website order declined');
     toast('Order declined.', 'ok');
   } catch(e){
