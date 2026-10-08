@@ -184,6 +184,25 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 .form-row .field label{display:block;font-family:var(--mono);font-size:10.5px;color:rgba(255,243,214,.5);margin-bottom:5px;}
 .form-row select,.form-row input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:#fff;font-size:13.5px;}
 .order-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;align-items:end;margin-bottom:16px;}
+/* View-only sections (permission 'view' but not 'edit'): dim every control
+   except ones explicitly marked safe (print/email/export/logout/nav etc). */
+.view.section-readonly{position:relative;}
+.view.section-readonly input:not([data-readonly-ok]),
+.view.section-readonly select:not([data-readonly-ok]),
+.view.section-readonly button:not([data-readonly-ok]),
+.view.section-readonly .stepbtn:not([data-readonly-ok]){
+  pointer-events:none!important; opacity:.4!important; filter:grayscale(.4);
+}
+.view.section-readonly [data-readonly-ok]{ pointer-events:auto; opacity:1; }
+.view.section-readonly::before{
+  content:'View only — ask jhon@chugjug.ph for edit access to this section';
+  display:block; font-family:var(--mono); font-size:11.5px; color:var(--amber);
+  background:rgba(255,178,61,.08); border:1px solid rgba(255,178,61,.3);
+  border-radius:8px; padding:8px 12px; margin-bottom:14px;
+}
+.team-sec-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12.5px;}
+.team-sec-row select{background:rgba(255,255,255,.05);color:#fff;border:1px solid var(--border);border-radius:6px;font-size:11.5px;padding:3px 6px;}
+.pill.admin{background:rgba(255,185,61,.15);color:var(--amber);border:1px solid rgba(255,185,61,.4);}
 .order-form .field label{display:block;font-family:var(--mono);font-size:10.5px;color:rgba(255,243,214,.5);margin-bottom:5px;}
 .order-form select,.order-form input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:#fff;font-size:13.5px;}
 .order-form .btn{grid-column:1/-1;}
@@ -303,6 +322,20 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
   </form>
 </div>
 
+<div class="load-screen login-screen hide" id="pendingScreen">
+  <div class="load-grid"></div>
+  <div class="login-box" style="text-align:center;">
+    <img src="" id="pendingLogo" class="login-logo" alt="Chug Jug PH">
+    <div class="login-title display">ACCESS PENDING</div>
+    <div class="login-sub mono">your account hasn't been granted access yet</div>
+    <div class="sub" style="margin:14px 0 18px;line-height:1.5;">
+      Ask <strong style="color:#fff;">jhon@chugjug.ph</strong> to grant you access to the sections you need,
+      from Settings &rarr; Team &amp; Access.
+    </div>
+    <button class="btn secondary" onclick="logout()">Sign out</button>
+  </div>
+</div>
+
 <div class="app-shell">
   <aside class="sidebar">
     <div class="sidebar-brand">
@@ -371,8 +404,8 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       </button>
       <div class="sub" id="todayLabel">chug jug ph · —</div>
       <div class="topbar-right">
-        <span class="roview" id="roBadge">read-only view</span>
-        <button class="btn ghost" id="logoutBtn" style="display:none;" onclick="logout()" title="Sign out">Sign out</button>
+        <span class="roview" id="roBadge" data-readonly-ok="1"></span>
+        <button class="btn ghost" id="logoutBtn" data-readonly-ok="1" style="display:none;" onclick="logout()" title="Sign out">Sign out</button>
       </div>
     </div>
     <div class="nav-backdrop" id="navBackdrop"></div>
@@ -798,11 +831,37 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
   </section>
 
   <section class="view" id="v-settings">
+    <div class="panel" id="teamAccessPanel" style="display:none;">
+      <h2>Team &amp; access <span class="sm">who can see and modify each section</span></h2>
+      <div class="sub" style="margin:-4px 0 14px;">jhon@chugjug.ph is the main admin and always has full access. Grant everyone else per-section view or edit permission below.</div>
+      <div class="order-form" style="margin-bottom:10px;">
+        <div class="field"><label>Email</label><input type="email" id="teamEmail" placeholder="staff@chugjug.ph"></div>
+        <div class="field"><label>Name</label><input type="text" id="teamName" placeholder="optional"></div>
+        <div class="field"><label>Role</label>
+          <select id="teamRole" onchange="onTeamRoleChange()">
+            <option value="member">Member (per-section)</option>
+            <option value="admin">Admin (full access)</option>
+          </select>
+        </div>
+      </div>
+      <div id="teamSectionGrid" class="order-summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px 16px;margin-bottom:14px;"></div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn" id="teamSaveBtn" onclick="saveTeamMember()">Save access</button>
+        <button class="btn ghost" onclick="resetTeamForm()">Clear form</button>
+      </div>
+      <div class="login-error mono" id="teamStatus" style="color:var(--lime);text-align:left;margin-top:10px;"></div>
+      <div class="table-scroll" style="margin-top:18px;">
+        <table>
+          <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Sections</th><th></th></tr></thead>
+          <tbody id="teamBody"></tbody>
+        </table>
+      </div>
+    </div>
     <div class="panel">
       <h2>Backup &amp; restore <span class="sm">export everything, or load it back in</span></h2>
       <div class="sub" style="margin:-4px 0 14px;">A full backup includes customers, orders, products, recipes, inventory, movements, suppliers, purchase orders, production batches, expenses, targets and settings. Importing never wipes data it doesn't touch.</div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-        <button class="btn" onclick="exportFullBackup()">Export full backup (JSON)</button>
+        <button class="btn" data-readonly-ok="1" onclick="exportFullBackup()">Export full backup (JSON)</button>
         <label class="btn secondary" style="cursor:pointer;">Import backup
           <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importFullBackup(event)">
         </label>
@@ -1019,6 +1078,219 @@ async function logActivity(message){
 }
 
 let db = null, user = null, canWrite = true;
+
+// --- Team access control -----------------------------------------------
+// jhon@chugjug.ph is the permanent main admin and always has full access,
+// whether or not a user_permissions row exists for him yet.
+const ADMIN_EMAIL = 'jhon@chugjug.ph';
+const SECTIONS = [
+  {key:'overview', label:'Overview'},
+  {key:'inventory', label:'Inventory'},
+  {key:'sales', label:'Sales'},
+  {key:'products', label:'Products'},
+  {key:'production', label:'Production'},
+  {key:'geo', label:'Geo'},
+  {key:'targets', label:'Targets'},
+  {key:'suppliers', label:'Suppliers'},
+  {key:'finance', label:'Finance'},
+  {key:'customers', label:'Customers'},
+  {key:'reports', label:'Reports'},
+  {key:'settings', label:'Settings'},
+];
+let currentUserEmail = '';
+let isAdminUser = false;
+let myPermissions = {}; // { sectionKey: 'view' | 'edit' }
+let teamMembersList = []; // {id(=email), email, displayName, role, permissions, ts}
+
+function canView(section){
+  if(isAdminUser) return true;
+  if(section === 'overview') return true; // every approved user gets at least the dashboard
+  const p = myPermissions[section];
+  return p === 'view' || p === 'edit';
+}
+function canEdit(section){
+  if(isAdminUser) return true;
+  return myPermissions[section] === 'edit';
+}
+// Call at the top of any write function. Returns true (and shows a toast)
+// if the user is NOT allowed to modify this section, so the caller should
+// stop. Usage: if(blockIfNoEdit('sales')) return;
+function blockIfNoEdit(section){
+  if(canEdit(section)) return false;
+  toast("You don't have permission to modify " + (SECTIONS.find(s=>s.key===section)||{label:section}).label + '.');
+  return true;
+}
+
+// Fetches the signed-in user's own access row and sets the permission
+// globals. jhon@chugjug.ph is always a full admin, even before any row
+// exists for him. Anyone else with no row is "unapproved" — not yet
+// granted access by the admin.
+async function loadMyPermissions(){
+  let email = '';
+  try{
+    const { data } = await sbClient.auth.getUser();
+    email = (data && data.user && data.user.email || '').toLowerCase();
+  } catch(e){ console.error('getUser failed', e); }
+  currentUserEmail = email;
+  isAdminUser = (email === ADMIN_EMAIL);
+  myPermissions = {};
+  let approved = isAdminUser;
+  if(email){
+    try{
+      const snap = await db.doc('user_permissions/'+email).get();
+      if(snap.exists){
+        const data = snap.data();
+        if(data.role === 'admin') isAdminUser = true;
+        myPermissions = data.permissions || {};
+        approved = true;
+      }
+    } catch(e){ console.error('loadMyPermissions failed', e); }
+  }
+  return approved;
+}
+
+// Hides nav tabs / views the current user can't see, dims controls in
+// sections they can see but not edit, and switches off a now-hidden view.
+function applyPermissionUI(){
+  const navButtons = document.querySelectorAll('.sidebar-nav button[data-view]');
+  let activeHidden = false;
+  navButtons.forEach(btn=>{
+    const section = btn.dataset.view;
+    const visible = canView(section);
+    btn.style.display = visible ? '' : 'none';
+    if(!visible && btn.classList.contains('active')) activeHidden = true;
+  });
+  if(activeHidden){
+    const firstVisible = Array.from(navButtons).find(b=>b.style.display !== 'none');
+    if(firstVisible) firstVisible.click();
+  }
+  SECTIONS.forEach(s=>{
+    const view = document.getElementById('v-'+s.key);
+    if(!view) return;
+    // Overview has no edit actions of its own, so it's never worth flagging read-only.
+    const readonly = s.key!=='overview' && canView(s.key) && !canEdit(s.key);
+    view.classList.toggle('section-readonly', readonly);
+  });
+  const teamPanel = document.getElementById('teamAccessPanel');
+  if(teamPanel) teamPanel.style.display = isAdminUser ? '' : 'none';
+  const roBadge = document.getElementById('roBadge');
+  if(roBadge){
+    roBadge.textContent = isAdminUser ? (currentUserEmail+' · admin') : (currentUserEmail+' · member');
+    roBadge.style.display = currentUserEmail ? '' : 'none';
+  }
+  if(isAdminUser) renderTeamPanel();
+}
+
+// --- Team & access (admin only) -----------------------------------------
+let editingTeamEmail = null; // set when the form is pre-filled to edit an existing member
+
+function sectionAccessValue(id){
+  const el = document.getElementById('teamSec_'+id);
+  return el ? el.value : 'none';
+}
+function buildTeamSectionGrid(permissions){
+  const grid = document.getElementById('teamSectionGrid');
+  if(!grid) return;
+  const perms = permissions || {};
+  grid.innerHTML = SECTIONS.map(s=>`
+    <div class="team-sec-row">
+      <span>${s.label}</span>
+      <select id="teamSec_${s.key}">
+        <option value="none" ${!perms[s.key]?'selected':''}>None</option>
+        <option value="view" ${perms[s.key]==='view'?'selected':''}>View</option>
+        <option value="edit" ${perms[s.key]==='edit'?'selected':''}>Edit</option>
+      </select>
+    </div>`).join('');
+}
+function onTeamRoleChange(){
+  const isAdminRole = document.getElementById('teamRole').value === 'admin';
+  const grid = document.getElementById('teamSectionGrid');
+  if(grid) grid.style.opacity = isAdminRole ? '.35' : '1';
+  SECTIONS.forEach(s=>{
+    const el = document.getElementById('teamSec_'+s.key);
+    if(el) el.disabled = isAdminRole;
+  });
+}
+function resetTeamForm(){
+  editingTeamEmail = null;
+  document.getElementById('teamEmail').value = '';
+  document.getElementById('teamEmail').disabled = false;
+  document.getElementById('teamName').value = '';
+  document.getElementById('teamRole').value = 'member';
+  buildTeamSectionGrid({});
+  onTeamRoleChange();
+  document.getElementById('teamStatus').textContent = '';
+  document.getElementById('teamSaveBtn').textContent = 'Save access';
+}
+function editTeamMember(email){
+  const m = teamMembersList.find(x=>x.id===email);
+  if(!m) return;
+  editingTeamEmail = email;
+  document.getElementById('teamEmail').value = m.email;
+  document.getElementById('teamEmail').disabled = true;
+  document.getElementById('teamName').value = m.displayName || '';
+  document.getElementById('teamRole').value = m.role || 'member';
+  buildTeamSectionGrid(m.permissions || {});
+  onTeamRoleChange();
+  document.getElementById('teamSaveBtn').textContent = 'Update access';
+  document.getElementById('teamStatus').textContent = '';
+}
+async function saveTeamMember(){
+  if(!isAdminUser){ toast('Only the main admin can manage team access.'); return; }
+  const emailInput = document.getElementById('teamEmail');
+  const email = emailInput.value.trim().toLowerCase();
+  const statusEl = document.getElementById('teamStatus');
+  if(!email || !email.includes('@')){ statusEl.style.color='var(--pink)'; statusEl.textContent = 'Enter a valid email.'; return; }
+  if(email === ADMIN_EMAIL){ statusEl.style.color='var(--pink)'; statusEl.textContent = ADMIN_EMAIL + ' is always the main admin.'; return; }
+  const displayName = document.getElementById('teamName').value.trim();
+  const role = document.getElementById('teamRole').value;
+  const permissions = {};
+  if(role !== 'admin'){
+    SECTIONS.forEach(s=>{
+      const v = sectionAccessValue(s.key);
+      if(v==='view' || v==='edit') permissions[s.key] = v;
+    });
+  }
+  try{
+    await db.doc('user_permissions/'+email).set({ email, displayName, role, permissions, ts:Date.now() });
+    statusEl.style.color = 'var(--lime)';
+    statusEl.textContent = (editingTeamEmail ? 'Updated access for ' : 'Granted access to ') + email + '.';
+    logActivity(`Team access ${editingTeamEmail?'updated':'granted'} for ${email} (${role})`);
+    resetTeamForm();
+  } catch(e){
+    console.error('saveTeamMember failed', e);
+    statusEl.style.color = 'var(--pink)';
+    statusEl.textContent = friendlyError(e);
+  }
+}
+async function removeTeamMember(email){
+  if(!isAdminUser){ toast('Only the main admin can manage team access.'); return; }
+  if(email === ADMIN_EMAIL) return;
+  await db.doc('user_permissions/'+email).delete();
+  logActivity(`Team access removed for ${email}`);
+  toast(email + ' no longer has access.', 'ok');
+}
+function sectionSummary(m){
+  if(m.role==='admin') return 'Full access';
+  const perms = m.permissions || {};
+  const parts = SECTIONS.filter(s=>perms[s.key]).map(s=>s.label+' ('+perms[s.key]+')');
+  return parts.length ? parts.join(', ') : 'No sections yet';
+}
+function renderTeamPanel(){
+  const body = document.getElementById('teamBody');
+  if(!body) return;
+  const rows = [{id:ADMIN_EMAIL, email:ADMIN_EMAIL, displayName:'Jhon Magdamo', role:'admin', permissions:{}, main:true}]
+    .concat(teamMembersList.filter(m=>m.id!==ADMIN_EMAIL));
+  body.innerHTML = rows.map(m=>`
+    <tr>
+      <td class="mono">${m.email}</td>
+      <td>${m.displayName||'—'}</td>
+      <td><span class="pill ${m.role==='admin'?'admin':'ok'}">${m.role}</span></td>
+      <td style="font-size:12px;color:rgba(255,243,214,.75);">${sectionSummary(m)}</td>
+      <td>${m.main ? '<span class="sm">main admin</span>' : `<button class="btn ghost" onclick="editTeamMember('${m.id}')">edit</button> <button class="btn ghost" onclick="removeTeamMember('${m.id}')">remove</button>`}</td>
+    </tr>`).join('');
+}
+
 let inventory = {};   // id -> {name, price, stock, lowThreshold}
 let salesList = [];   // array of {id, flavorId, flavorName, qty, revenue, date, ts}
 let target = {revenueTarget:0, unitsTarget:0, month: monthStr()};
@@ -1101,6 +1373,7 @@ function computeCosting(productId){
 
 // --- Components (raw ingredients / packaging) -----------------------------
 async function addComponent(){
+  if(blockIfNoEdit('inventory')) return;
   const name = document.getElementById('compName').value.trim();
   if(!name) return;
   const category = document.getElementById('compCategory').value;
@@ -1123,6 +1396,7 @@ async function addComponent(){
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function setComponentStock(id, val){
+  if(blockIfNoEdit('inventory')) return;
   const stock = Math.max(0, parseFloat(val)||0);
   const comp = componentsList.find(c=>c.id===id);
   const delta = comp ? stock - (comp.stock||0) : 0;
@@ -1135,12 +1409,15 @@ async function setComponentStock(id, val){
   }
 }
 async function setComponentLow(id, val){
+  if(blockIfNoEdit('inventory')) return;
   await db.doc('components/'+id).update({lowThreshold: Math.max(0, parseFloat(val)||0)});
 }
 async function setComponentCost(id, val){
+  if(blockIfNoEdit('inventory')) return;
   await db.doc('components/'+id).update({costPerUnit: Math.max(0, parseFloat(val)||0)});
 }
 async function deleteComponent(id){
+  if(blockIfNoEdit('inventory')) return;
   await db.doc('components/'+id).delete();
 }
 function renderComponents(){
@@ -1183,6 +1460,7 @@ function renderMovements(){
 
 // --- Expenses ---------------------------------------------------------------
 async function addExpense(){
+  if(blockIfNoEdit('finance')) return;
   const date = document.getElementById('expDate').value || todayStr();
   const category = document.getElementById('expCategory').value;
   const amount = Math.max(0, parseFloat(document.getElementById('expAmount').value)||0);
@@ -1199,6 +1477,7 @@ async function addExpense(){
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteExpense(id){
+  if(blockIfNoEdit('finance')) return;
   await db.doc('expenses/'+id).delete();
 }
 function renderExpenses(){
@@ -1255,6 +1534,7 @@ function removePoDraftItem(idx){
   renderPoDraftItems();
 }
 async function createPurchaseOrder(){
+  if(blockIfNoEdit('suppliers')) return;
   if(poDraftItems.length===0) return;
   const supplierId = document.getElementById('poSupplier').value;
   const supplier = suppliersList.find(s=>s.id===supplierId);
@@ -1294,12 +1574,14 @@ async function receivePurchaseOrder(po){
   await db.doc('purchase_orders/'+po.id).update({status:'RECEIVED', receivedDate:todayStr()});
 }
 async function markPoReceived(id){
+  if(blockIfNoEdit('suppliers')) return;
   const po = purchaseOrdersList.find(p=>p.id===id);
   if(!po || po.status==='RECEIVED') return; // never double-deduct/receive
   await receivePurchaseOrder(po);
   logActivity(`Purchase order ${po.poNo} received from ${po.supplierName}`);
 }
 async function cancelPo(id){
+  if(blockIfNoEdit('suppliers')) return;
   const po = purchaseOrdersList.find(p=>p.id===id);
   if(!po || po.status==='RECEIVED') return;
   await db.doc('purchase_orders/'+id).update({status:'CANCELLED'});
@@ -1321,8 +1603,8 @@ function renderPurchaseOrders(){
       <td><span class="pill ${PO_PILL[po.status]||'low'}">${(po.status||'DRAFT').toLowerCase().replace('_',' ')}</span></td>
       <td>
         ${po.status==='ORDERED' ? `<button class="btn ghost" onclick="markPoReceived('${po.id}')">receive</button> <button class="btn ghost" onclick="cancelPo('${po.id}')">cancel</button> ` : ''}
-        <button class="btn ghost" onclick="printPurchaseOrder('${po.id}')" title="Open a printable PO on the official template">print</button>
-        <button class="btn ghost" onclick="emailPurchaseOrder('${po.id}')" title="Open an email to the supplier with a printable PO attached">email</button>
+        <button class="btn ghost" data-readonly-ok="1" onclick="printPurchaseOrder('${po.id}')" title="Open a printable PO on the official template">print</button>
+        <button class="btn ghost" data-readonly-ok="1" onclick="emailPurchaseOrder('${po.id}')" title="Open an email to the supplier with a printable PO attached">email</button>
       </td>
     </tr>`).join('');
 }
@@ -1495,6 +1777,7 @@ function emailPurchaseOrder(id){
 
 // --- Finance (revenue, COGS, gross/net profit, cash flow) -------------------
 async function saveCashSettings(){
+  if(blockIfNoEdit('finance')) return;
   const openingCash = Math.max(0, parseFloat(document.getElementById('cashOpening').value)||0);
   await db.doc('settings/finance').set({openingCash});
 }
@@ -1633,6 +1916,7 @@ function checkBatchAvailability(){
   `;
 }
 async function createBatch(){
+  if(blockIfNoEdit('production')) return;
   const productId = document.getElementById('batchProduct').value;
   const product = productsList.find(p=>p.id===productId);
   if(!product) return;
@@ -1654,6 +1938,7 @@ const BATCH_PILL = { PLANNED:'low', PREPARING:'low', READY:'low', RELEASED:'ok',
 // recipe's components and adds the finished units to inventory, logging a
 // movement for each — guarded so a batch can never be released twice.
 async function releaseBatch(batch){
+  if(blockIfNoEdit('production')) return;
   const items = recipeItemsList.filter(r=>r.productId===batch.productId);
   for(const item of items){
     const comp = componentsList.find(c=>c.id===item.componentId);
@@ -1675,6 +1960,7 @@ async function releaseBatch(batch){
   logActivity(`Batch ${batch.batchNo} released: +${batch.qty} ${batch.productName} into inventory`);
 }
 async function advanceBatch(id){
+  if(blockIfNoEdit('production')) return;
   const batch = productionBatchesList.find(b=>b.id===id);
   if(!batch) return;
   const next = BATCH_NEXT_STATUS[batch.status];
@@ -1687,6 +1973,7 @@ async function advanceBatch(id){
   }
 }
 async function cancelBatch(id){
+  if(blockIfNoEdit('production')) return;
   const batch = productionBatchesList.find(b=>b.id===id);
   if(!batch || batch.status==='RELEASED') return;
   await db.doc('production_batches/'+id).update({status:'CANCELLED'});
@@ -1860,10 +2147,10 @@ function renderExportButtons(){
   const box = document.getElementById('exportButtons');
   if(!box) return;
   box.innerHTML = `
-    <button class="btn secondary" onclick="exportSalesCSV()">Sales (CSV)</button>
-    <button class="btn secondary" onclick="exportInventoryCSV()">Inventory (CSV)</button>
-    <button class="btn secondary" onclick="exportCustomersCSV()">Customers (CSV)</button>
-    <button class="btn secondary" onclick="exportSuppliersCSV()">Suppliers (CSV)</button>
+    <button class="btn secondary" data-readonly-ok="1" onclick="exportSalesCSV()">Sales (CSV)</button>
+    <button class="btn secondary" data-readonly-ok="1" onclick="exportInventoryCSV()">Inventory (CSV)</button>
+    <button class="btn secondary" data-readonly-ok="1" onclick="exportCustomersCSV()">Customers (CSV)</button>
+    <button class="btn secondary" data-readonly-ok="1" onclick="exportSuppliersCSV()">Suppliers (CSV)</button>
     <button class="btn secondary" onclick="exportExpensesCSV()">Expenses (CSV)</button>
     <button class="btn secondary" onclick="exportFinanceJSON()">Finance summary (JSON)</button>
   `;
@@ -1883,6 +2170,7 @@ function exportFullBackup(){
   logActivity('Full data backup exported');
 }
 async function importFullBackup(evt){
+  if(!isAdminUser){ toast('Only the main admin can restore a backup.'); return; }
   const file = evt.target.files[0];
   if(!file) return;
   const statusEl = document.getElementById('backupStatus');
@@ -1926,6 +2214,7 @@ async function importFullBackup(evt){
 
 // --- Products catalog + recipe editor --------------------------------------
 async function addProduct(){
+  if(blockIfNoEdit('products')) return;
   const name = document.getElementById('prodName').value.trim();
   if(!name) return;
   const category = document.getElementById('prodCategory').value.trim() || 'Cocktail Kit';
@@ -1947,6 +2236,7 @@ async function addProduct(){
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function toggleProductActive(id, active){
+  if(blockIfNoEdit('products')) return;
   await db.doc('products/'+id).update({active});
 }
 function renderProducts(){
@@ -2013,6 +2303,7 @@ function renderRecipeModal(){
   `;
 }
 async function addRecipeItem(){
+  if(blockIfNoEdit('products')) return;
   const componentId = document.getElementById('recipeCompSelect').value;
   const qtyPerUnit = Math.max(0, parseFloat(document.getElementById('recipeQtyInput').value)||0);
   if(!componentId || !currentRecipeProductId) return;
@@ -2021,6 +2312,7 @@ async function addRecipeItem(){
   else { await db.collection('recipe_items').add({productId:currentRecipeProductId, componentId, qtyPerUnit}); }
 }
 async function removeRecipeItem(id){
+  if(blockIfNoEdit('products')) return;
   await db.doc('recipe_items/'+id).delete();
 }
 
@@ -2206,38 +2498,49 @@ async function startApp(){
   db = makeSupabaseDb(sbClient);
   canWrite = true;
 
+  const approved = await loadMyPermissions();
+  if(!approved){
+    hideLoginScreen();
+    document.getElementById('pendingLogo').src = document.querySelector('.head-logo').src;
+    document.getElementById('pendingScreen').classList.remove('hide');
+    return false;
+  }
+  document.getElementById('pendingScreen').classList.add('hide');
+
   try{
-    // seed inventory (finished goods) if empty
-    const invSnap = await db.collection('inventory').get();
-    if(invSnap.empty){
-      for(const f of FLAVORS){
-        await db.doc('inventory/'+f.id).set({name:f.name, price:f.price, stock:24, lowThreshold:10});
+    if(isAdminUser){
+      // seed inventory (finished goods) if empty
+      const invSnap = await db.collection('inventory').get();
+      if(invSnap.empty){
+        for(const f of FLAVORS){
+          await db.doc('inventory/'+f.id).set({name:f.name, price:f.price, stock:24, lowThreshold:10});
+        }
       }
-    }
 
-    // seed the product catalog from the official five flavors if empty
-    const prodSnap = await db.collection('products').get();
-    if(prodSnap.empty){
-      for(const f of FLAVORS){
-        await db.doc('products/'+f.id).set({name:f.name, category:'Cocktail Kit', colorTheme:FLAVOR_THEME[f.id]||'#2DE2FF', sellingPrice:f.price, description:'', active:true, ts:Date.now()});
+      // seed the product catalog from the official five flavors if empty
+      const prodSnap = await db.collection('products').get();
+      if(prodSnap.empty){
+        for(const f of FLAVORS){
+          await db.doc('products/'+f.id).set({name:f.name, category:'Cocktail Kit', colorTheme:FLAVOR_THEME[f.id]||'#2DE2FF', sellingPrice:f.price, description:'', active:true, ts:Date.now()});
+        }
       }
-    }
 
-    // seed starter components + recipes if empty (editable placeholders)
-    const compSnap = await db.collection('components').get();
-    let seededComponents = compSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    if(compSnap.empty){
-      for(const c of DEFAULT_COMPONENTS){
-        const res = await db.collection('components').add({...c, stock:0, lowThreshold:20, ts:Date.now()});
-        seededComponents.push({id:res.id, ...c, stock:0, lowThreshold:20});
-      }
-      const riSnap = await db.collection('recipe_items').get();
-      if(riSnap.empty){
-        const byName = {};
-        seededComponents.forEach(c=>{ byName[c.name] = c.id; });
-        for(const [pid, items] of Object.entries(DEFAULT_RECIPES)){
-          for(const [name, qty] of items){
-            if(byName[name]) await db.collection('recipe_items').add({productId:pid, componentId:byName[name], qtyPerUnit:qty});
+      // seed starter components + recipes if empty (editable placeholders)
+      const compSnap = await db.collection('components').get();
+      let seededComponents = compSnap.docs.map(d=>({id:d.id, ...d.data()}));
+      if(compSnap.empty){
+        for(const c of DEFAULT_COMPONENTS){
+          const res = await db.collection('components').add({...c, stock:0, lowThreshold:20, ts:Date.now()});
+          seededComponents.push({id:res.id, ...c, stock:0, lowThreshold:20});
+        }
+        const riSnap = await db.collection('recipe_items').get();
+        if(riSnap.empty){
+          const byName = {};
+          seededComponents.forEach(c=>{ byName[c.name] = c.id; });
+          for(const [pid, items] of Object.entries(DEFAULT_RECIPES)){
+            for(const [name, qty] of items){
+              if(byName[name]) await db.collection('recipe_items').add({productId:pid, componentId:byName[name], qtyPerUnit:qty});
+            }
           }
         }
       }
@@ -2356,8 +2659,17 @@ async function startApp(){
     renderActivityLog();
   }, err=>console.error('activity_log', err));
 
+  if(isAdminUser){
+    resetTeamForm();
+    db.collection('user_permissions').onSnapshot(snap=>{
+      teamMembersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      renderTeamPanel();
+    }, err=>console.error('user_permissions', err));
+  }
+
   renderExportButtons();
   renderReports();
+  applyPermissionUI();
   document.getElementById('logoutBtn').style.display = '';
   return true;
 }
@@ -2428,6 +2740,8 @@ async function logout(){
 
 function showLoginScreen(){
   document.getElementById('loginScreen').classList.remove('hide');
+  const ps = document.getElementById('pendingScreen');
+  if(ps) ps.classList.add('hide');
 }
 function hideLoginScreen(){
   document.getElementById('loginScreen').classList.add('hide');
@@ -2469,6 +2783,7 @@ async function init(){
       hideLoginScreen();
       startApp();
     } else if(event === 'SIGNED_OUT'){
+      appStarted = false; // allow a fresh sign-in (same tab) to re-run startApp and reload permissions
       showLoginScreen();
     }
   });
@@ -2497,17 +2812,21 @@ function renderInventory(){
 }
 
 async function adjustStock(id, delta){
+  if(blockIfNoEdit('inventory')) return;
   const cur = (inventory[id]&&inventory[id].stock) || 0;
   await setStock(id, cur + delta);
 }
 async function setStock(id, val){
+  if(blockIfNoEdit('inventory')) return;
   const v = Math.max(0, parseInt(val)||0);
   await db.doc('inventory/'+id).update({stock: v});
 }
 async function setLowThreshold(id, val){
+  if(blockIfNoEdit('inventory')) return;
   await db.doc('inventory/'+id).update({lowThreshold: Math.max(0, parseInt(val)||0)});
 }
 async function setPrice(id, val){
+  if(blockIfNoEdit('inventory')) return;
   const price = Math.max(0, parseFloat(val)||0);
   await db.doc('inventory/'+id).update({price});
   if(productsList.some(p=>p.id===id)) await db.doc('products/'+id).update({sellingPrice:price});
@@ -2565,6 +2884,7 @@ async function deductComponentsForOrder(productId, productName, qty, orderNo){
 }
 
 async function logSale(){
+  if(blockIfNoEdit('sales')) return;
   const f = activeProducts().find(x=>x.id===saleFlavorSel.value);
   if(!f){ toast('Pick a flavor before creating the order.'); return; }
   const qty = Math.max(1, parseInt(document.getElementById('saleQty').value)||1);
@@ -2615,11 +2935,13 @@ async function logSale(){
 }
 
 async function updateOrderStatus(id, val){
+  if(blockIfNoEdit('sales')) return;
   await db.doc('sales/'+id).update({orderStatus: val});
   const s = salesList.find(x=>x.id===id);
   logActivity(`Order ${s?s.orderNo:id} status set to ${val}`);
 }
 async function updateDeliveryStatus(id, val){
+  if(blockIfNoEdit('sales')) return;
   await db.doc('sales/'+id).update({deliveryStatus: val});
   const s = salesList.find(x=>x.id===id);
   logActivity(`Order ${s?s.orderNo:id} delivery status set to ${val}`);
@@ -2649,6 +2971,7 @@ function renderFulfillment(){
 }
 
 async function deleteSale(id){
+  if(blockIfNoEdit('sales')) return;
   await db.doc('sales/'+id).delete();
 }
 
@@ -2690,6 +3013,7 @@ function renderSales(){
 }
 
 async function addSupplier(){
+  if(blockIfNoEdit('suppliers')) return;
   const name = document.getElementById('suppName').value.trim();
   if(!name) return;
   const contact = document.getElementById('suppContact').value.trim();
@@ -2715,6 +3039,7 @@ async function addSupplier(){
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteSupplier(id){
+  if(blockIfNoEdit('suppliers')) return;
   await db.doc('suppliers/'+id).delete();
 }
 function renderSuppliers(){
@@ -2747,6 +3072,7 @@ function renderSuppliers(){
 }
 
 async function addCustomer(){
+  if(blockIfNoEdit('customers')) return;
   const name = document.getElementById('custName').value.trim();
   if(!name) return;
   const phone = document.getElementById('custPhone').value.trim();
@@ -2771,6 +3097,7 @@ async function addCustomer(){
   } finally { btn.disabled = !canWrite ? true : false; }
 }
 async function deleteCustomer(id){
+  if(blockIfNoEdit('customers')) return;
   await db.doc('customers/'+id).delete();
 }
 
@@ -2867,6 +3194,7 @@ function renderTargets(){
 }
 
 async function saveTarget(){
+  if(blockIfNoEdit('targets')) return;
   const revenueTarget = Math.max(0, parseFloat(document.getElementById('tgRevenue').value)||0);
   const unitsTarget = Math.max(0, parseInt(document.getElementById('tgUnits').value)||0);
   await db.doc('settings/targets').set({revenueTarget, unitsTarget, month: monthStr()});
