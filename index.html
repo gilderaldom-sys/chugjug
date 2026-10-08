@@ -207,7 +207,13 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 .weborder .wo-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
 .weborder .wo-items{font-size:12.5px;color:rgba(255,243,214,.75);margin-bottom:8px;}
 .weborder .wo-cust{font-size:12.5px;color:rgba(255,243,214,.6);margin-bottom:10px;line-height:1.5;}
-.weborder .wo-actions{display:flex;gap:10px;}
+.weborder .wo-actions{display:flex;gap:10px;flex-wrap:wrap;}
+.weborder .wo-pay{display:flex;align-items:center;gap:8px;font-size:12.5px;color:rgba(255,243,214,.6);margin-bottom:10px;}
+.paypill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em;}
+.paypill.unpaid{background:rgba(255,99,99,.15);color:#ff8c8c;border:1px solid rgba(255,99,99,.4);}
+.paypill.partial{background:rgba(255,185,61,.15);color:var(--amber);border:1px solid rgba(255,185,61,.4);}
+.paypill.paid{background:rgba(89,230,160,.15);color:#6ee8ab;border:1px solid rgba(89,230,160,.4);}
+.nav-badge{margin-left:auto;background:linear-gradient(135deg,var(--orange),var(--pink));color:#fff;font-family:var(--mono);font-size:10.5px;font-weight:800;min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:flex;align-items:center;justify-content:center;line-height:1;}
 .order-form .field label{display:block;font-family:var(--mono);font-size:10.5px;color:rgba(255,243,214,.5);margin-bottom:5px;}
 .order-form select,.order-form input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:#fff;font-size:13.5px;}
 .order-form .btn{grid-column:1/-1;}
@@ -362,6 +368,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <button data-view="sales">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5h14l-1.5 9h-11z"/><path d="M6 5 7.5 2h5L14 5"/><circle cx="8" cy="17" r="1.2" fill="currentColor" stroke="none"/><circle cx="13" cy="17" r="1.2" fill="currentColor" stroke="none"/></svg>
         <span>Orders</span>
+        <span class="nav-badge" id="ordersNavBadge" style="display:none;"></span>
       </button>
       <button data-view="products">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 2v4.2L3.5 11c-.6.8 0 2 1 2h11c1 0 1.6-1.2 1-2L13 6.2V2"/><path d="M7 2h6"/><path d="M5.5 12.5h9"/></svg>
@@ -2868,10 +2875,18 @@ function renderOnlineOrders(){
   const panel = document.getElementById('onlineOrdersPanel');
   const body = document.getElementById('onlineOrdersBody');
   const countEl = document.getElementById('onlineOrdersCount');
+  const navBadge = document.getElementById('ordersNavBadge');
   if(!panel || !body) return;
+  // A pending/active notification is only ever a NEW order: the moment staff
+  // confirm or decline one, it drops out of this filter and off both the
+  // panel and the sidebar badge.
   const pending = onlineOrdersList.filter(o=>o.status==='NEW');
   panel.style.display = onlineOrdersList.length ? '' : 'none';
   if(countEl) countEl.textContent = pending.length ? (pending.length+' pending') : 'none pending';
+  if(navBadge){
+    navBadge.style.display = pending.length ? 'flex' : 'none';
+    navBadge.textContent = pending.length > 99 ? '99+' : String(pending.length);
+  }
   if(!pending.length){
     body.innerHTML = '<div class="sub">No pending web orders right now.</div>';
     return;
@@ -2880,6 +2895,8 @@ function renderOnlineOrders(){
     const items = o.items||[];
     const itemsText = items.map(it=>`${it.name||it.flavorId} ×${it.qty}`).join(', ');
     const when = o.ts ? new Date(o.ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+    const payStatus = (o.paymentStatus||'UNPAID').toUpperCase();
+    const payPillClass = payStatus==='PAID' ? 'paid' : (payStatus==='PARTIAL' ? 'partial' : 'unpaid');
     return `
       <div class="weborder">
         <div class="wo-head">
@@ -2888,12 +2905,18 @@ function renderOnlineOrders(){
         </div>
         <div class="wo-items">${itemsText||'No items'}</div>
         <div class="wo-cust">
+          ${o.customerEmail?`Email: ${o.customerEmail}<br>`:''}
           ${o.customerPhone?`Phone: ${o.customerPhone}<br>`:''}
           ${o.customerAddress?`Address: ${o.customerAddress}<br>`:''}
           ${o.notes?`Notes: ${o.notes}`:''}
         </div>
+        <div class="wo-pay">
+          <span>${o.paymentMethod||'GCash/Maya QR'}</span>
+          <span class="paypill ${payPillClass}">${payStatus}</span>
+        </div>
         <div class="wo-actions">
           <button class="btn" onclick="confirmOnlineOrder('${o.id}')">Confirm → create sale</button>
+          ${payStatus!=='PAID' ? `<button class="btn secondary" data-readonly-ok="1" onclick="markOnlineOrderPaid('${o.id}')">Mark paid</button>` : ''}
           <button class="btn ghost" onclick="declineOnlineOrder('${o.id}')">Decline</button>
         </div>
       </div>`;
@@ -2907,10 +2930,12 @@ async function confirmOnlineOrder(id){
   const items = ord.items || [];
   if(!items.length){ toast('This order has no items to confirm.'); return; }
   try{
-    const customer = ord.customerName ? await findOrCreateCustomer(ord.customerName, ord.customerPhone||'', '', 'Unspecified') : null;
+    const customer = ord.customerName ? await findOrCreateCustomer(ord.customerName, ord.customerPhone||'', '', 'Unspecified', ord.customerEmail||'') : null;
     const orderNo = nextOrderNo();
     const addressNote = ord.customerAddress ? ('Delivery: '+ord.customerAddress) : '';
     const combinedNotes = [addressNote, ord.notes||''].filter(Boolean).join(' | ');
+    const payMethod = ord.paymentMethod || 'GCash/Maya QR';
+    const payStatus = ord.paymentStatus || 'UNPAID';
     for(const it of items){
       const f = activeProducts().find(x=>x.id===it.flavorId) || {id:it.flavorId, name:it.name||it.flavorId, price:it.unitPrice||0};
       const qty = Math.max(0, it.qty||0);
@@ -2921,7 +2946,7 @@ async function confirmOnlineOrder(id){
         orderNo, flavorId:f.id, flavorName: it.name||f.name, qty, unitPrice:price, revenue, total:revenue, discount:0, deliveryFee:0,
         date: todayStr(), region:'', regionName:'Unspecified',
         customerId: customer?customer.id:null, customerName: customer?customer.name:(ord.customerName||'Online order'),
-        paymentMethod:'COD', paymentStatus:'UNPAID', orderStatus:'NEW', deliveryStatus:'PENDING', rider:'',
+        paymentMethod:payMethod, paymentStatus:payStatus, orderStatus:'NEW', deliveryStatus:'PENDING', rider:'',
         notes: combinedNotes, ts:Date.now()
       });
       const curStock = (inventory[f.id]&&inventory[f.id].stock) || 0;
@@ -2933,6 +2958,17 @@ async function confirmOnlineOrder(id){
     toast(`Confirmed as ${orderNo}.`, 'ok');
   } catch(e){
     console.error('confirmOnlineOrder failed', e);
+    toast(friendlyError(e));
+  }
+}
+
+async function markOnlineOrderPaid(id){
+  if(blockIfNoEdit('sales')) return;
+  try{
+    await db.doc('online_orders/'+id).update({paymentStatus:'PAID'});
+    toast('Marked as paid.', 'ok');
+  } catch(e){
+    console.error('markOnlineOrderPaid failed', e);
     toast(friendlyError(e));
   }
 }
@@ -2951,7 +2987,7 @@ async function declineOnlineOrder(id){
 
 // Looks up a customer by phone (preferred) or exact name; creates one if no
 // match is found. Returns {id, name}.
-async function findOrCreateCustomer(name, phone, region, regionName){
+async function findOrCreateCustomer(name, phone, region, regionName, email){
   name = (name||'').trim();
   if(!name) return null;
   let existing = null;
@@ -2959,7 +2995,7 @@ async function findOrCreateCustomer(name, phone, region, regionName){
   if(!existing) existing = customersList.find(c=>c.name.toLowerCase()===name.toLowerCase());
   if(existing) return {id:existing.id, name:existing.name};
   const res = await db.collection('customers').add({
-    name, phone:phone||'', location:region||'', locationName:regionName||'Unspecified',
+    name, phone:phone||'', email:email||'', location:region||'', locationName:regionName||'Unspecified',
     type:'retail', ts:Date.now()
   });
   return {id:res.id, name};
