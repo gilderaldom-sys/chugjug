@@ -3004,7 +3004,23 @@ async function findOrCreateCustomer(name, phone, region, regionName, email){
   let existing = null;
   if(phone) existing = customersList.find(c=>c.phone && c.phone===phone);
   if(!existing) existing = customersList.find(c=>c.name.toLowerCase()===name.toLowerCase());
-  if(existing) return {id:existing.id, name:existing.name};
+  if(existing){
+    // Matched an existing customer by phone/name -- keep them as one
+    // record (don't fork a duplicate), but refresh name/email/location
+    // from this latest order so a repeat buyer's info doesn't stay stuck
+    // on whatever was on file from an earlier, possibly placeholder, order.
+    const patch = {};
+    if(name && name !== existing.name) patch.name = name;
+    if(email && email !== existing.email) patch.email = email;
+    if(region && region !== existing.location){ patch.location = region; patch.locationName = regionName||'Unspecified'; }
+    if(Object.keys(patch).length){
+      try{
+        await db.doc('customers/'+existing.id).update(patch);
+        Object.assign(existing, patch); // keep local state in sync until realtime catches up
+      }catch(e){ console.warn('customer refresh failed (non-blocking)', e); }
+    }
+    return {id:existing.id, name: patch.name || existing.name};
+  }
   const res = await db.collection('customers').add({
     name, phone:phone||'', email:email||'', location:region||'', locationName:regionName||'Unspecified',
     type:'retail', ts:Date.now()
