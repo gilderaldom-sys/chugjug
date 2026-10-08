@@ -203,6 +203,11 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 .team-sec-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12.5px;}
 .team-sec-row select{background:rgba(255,255,255,.05);color:#fff;border:1px solid var(--border);border-radius:6px;font-size:11.5px;padding:3px 6px;}
 .pill.admin{background:rgba(255,185,61,.15);color:var(--amber);border:1px solid rgba(255,185,61,.4);}
+.weborder{border:1px solid rgba(255,185,61,.35);background:rgba(255,185,61,.06);border-radius:10px;padding:14px 16px;margin-bottom:10px;}
+.weborder .wo-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
+.weborder .wo-items{font-size:12.5px;color:rgba(255,243,214,.75);margin-bottom:8px;}
+.weborder .wo-cust{font-size:12.5px;color:rgba(255,243,214,.6);margin-bottom:10px;line-height:1.5;}
+.weborder .wo-actions{display:flex;gap:10px;}
 .order-form .field label{display:block;font-family:var(--mono);font-size:10.5px;color:rgba(255,243,214,.5);margin-bottom:5px;}
 .order-form select,.order-form input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:#fff;font-size:13.5px;}
 .order-form .btn{grid-column:1/-1;}
@@ -495,6 +500,11 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
   </section>
 
   <section class="view" id="v-sales">
+    <div class="panel" id="onlineOrdersPanel" style="display:none;">
+      <h2>Online orders <span class="sm" id="onlineOrdersCount"></span></h2>
+      <div class="sub" style="margin:-4px 0 14px;">Orders placed on chugjugph.vercel.app land here first. Confirm to turn one into a real sale (deducts stock); decline to dismiss it.</div>
+      <div id="onlineOrdersBody"></div>
+    </div>
     <div class="cards" id="orderKpis"></div>
     <div class="panel">
       <h2>New order <span class="sm" id="orderNoPreview"></span></h2>
@@ -1293,6 +1303,7 @@ function renderTeamPanel(){
 
 let inventory = {};   // id -> {name, price, stock, lowThreshold}
 let salesList = [];   // array of {id, flavorId, flavorName, qty, revenue, date, ts}
+let onlineOrdersList = []; // pending orders submitted from chugjugph.vercel.app: {id, orderNo, items, subtotal, customerName, customerPhone, customerAddress, notes, status, source, ts}
 let target = {revenueTarget:0, unitsTarget:0, month: monthStr()};
 let suppliersList = []; // {id, name, contact, phone, item, status, ts}
 let customersList = []; // {id, name, phone, location, locationName, type, orders, ts}
@@ -2575,6 +2586,11 @@ async function startApp(){
     renderReports();
   }, err=>console.error('sales', err));
 
+  db.collection('online_orders').orderBy('ts','desc').limit(200).onSnapshot(snap=>{
+    onlineOrdersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderOnlineOrders();
+  }, err=>console.error('online_orders', err));
+
   db.doc('settings/targets').onSnapshot(snap=>{
     if(snap.exists){
       const d = snap.data();
@@ -2842,6 +2858,95 @@ function nextOrderNo(){
 function updateOrderNoPreview(){
   const el = document.getElementById('orderNoPreview');
   if(el) el.textContent = 'next: ' + nextOrderNo();
+}
+
+// --- Online orders (from chugjugph.vercel.app) ---------------------------
+// The website inserts a row here (as the public 'anon' role, insert-only)
+// whenever a customer checks out. Staff review and Confirm (creates real
+// sales rows + deducts stock, exactly like logging a sale here) or Decline.
+function renderOnlineOrders(){
+  const panel = document.getElementById('onlineOrdersPanel');
+  const body = document.getElementById('onlineOrdersBody');
+  const countEl = document.getElementById('onlineOrdersCount');
+  if(!panel || !body) return;
+  const pending = onlineOrdersList.filter(o=>o.status==='NEW');
+  panel.style.display = onlineOrdersList.length ? '' : 'none';
+  if(countEl) countEl.textContent = pending.length ? (pending.length+' pending') : 'none pending';
+  if(!pending.length){
+    body.innerHTML = '<div class="sub">No pending web orders right now.</div>';
+    return;
+  }
+  body.innerHTML = pending.map(o=>{
+    const items = o.items||[];
+    const itemsText = items.map(it=>`${it.name||it.flavorId} ×${it.qty}`).join(', ');
+    const when = o.ts ? new Date(o.ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+    return `
+      <div class="weborder">
+        <div class="wo-head">
+          <strong>${o.customerName||'Website order'}</strong>
+          <span class="sm mono">₱${Number(o.subtotal||0).toLocaleString()} · ${when}</span>
+        </div>
+        <div class="wo-items">${itemsText||'No items'}</div>
+        <div class="wo-cust">
+          ${o.customerPhone?`Phone: ${o.customerPhone}<br>`:''}
+          ${o.customerAddress?`Address: ${o.customerAddress}<br>`:''}
+          ${o.notes?`Notes: ${o.notes}`:''}
+        </div>
+        <div class="wo-actions">
+          <button class="btn" onclick="confirmOnlineOrder('${o.id}')">Confirm → create sale</button>
+          <button class="btn ghost" onclick="declineOnlineOrder('${o.id}')">Decline</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function confirmOnlineOrder(id){
+  if(blockIfNoEdit('sales')) return;
+  const ord = onlineOrdersList.find(o=>o.id===id);
+  if(!ord || ord.status!=='NEW') return;
+  const items = ord.items || [];
+  if(!items.length){ toast('This order has no items to confirm.'); return; }
+  try{
+    const customer = ord.customerName ? await findOrCreateCustomer(ord.customerName, ord.customerPhone||'', '', 'Unspecified') : null;
+    const orderNo = nextOrderNo();
+    const addressNote = ord.customerAddress ? ('Delivery: '+ord.customerAddress) : '';
+    const combinedNotes = [addressNote, ord.notes||''].filter(Boolean).join(' | ');
+    for(const it of items){
+      const f = activeProducts().find(x=>x.id===it.flavorId) || {id:it.flavorId, name:it.name||it.flavorId, price:it.unitPrice||0};
+      const qty = Math.max(0, it.qty||0);
+      if(!qty) continue;
+      const price = it.unitPrice!=null ? it.unitPrice : ((inventory[f.id]&&inventory[f.id].price!=null) ? inventory[f.id].price : f.price||0);
+      const revenue = qty*price;
+      await db.collection('sales').add({
+        orderNo, flavorId:f.id, flavorName: it.name||f.name, qty, unitPrice:price, revenue, total:revenue, discount:0, deliveryFee:0,
+        date: todayStr(), region:'', regionName:'Unspecified',
+        customerId: customer?customer.id:null, customerName: customer?customer.name:(ord.customerName||'Online order'),
+        paymentMethod:'COD', paymentStatus:'UNPAID', orderStatus:'NEW', deliveryStatus:'PENDING', rider:'',
+        notes: combinedNotes, ts:Date.now()
+      });
+      const curStock = (inventory[f.id]&&inventory[f.id].stock) || 0;
+      await db.doc('inventory/'+f.id).update({stock: Math.max(0, curStock - qty)});
+      await deductComponentsForOrder(f.id, it.name||f.name, qty, orderNo);
+    }
+    await db.doc('online_orders/'+id).update({status:'CONFIRMED', confirmedOrderNo:orderNo});
+    logActivity(`Website order confirmed as ${orderNo} (${ord.customerName||'customer'})`);
+    toast(`Confirmed as ${orderNo}.`, 'ok');
+  } catch(e){
+    console.error('confirmOnlineOrder failed', e);
+    toast(friendlyError(e));
+  }
+}
+
+async function declineOnlineOrder(id){
+  if(blockIfNoEdit('sales')) return;
+  try{
+    await db.doc('online_orders/'+id).update({status:'DECLINED'});
+    logActivity('Website order declined');
+    toast('Order declined.', 'ok');
+  } catch(e){
+    console.error('declineOnlineOrder failed', e);
+    toast(friendlyError(e));
+  }
 }
 
 // Looks up a customer by phone (preferred) or exact name; creates one if no
