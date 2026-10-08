@@ -1797,7 +1797,15 @@ function emailPurchaseOrder(id){
 async function saveCashSettings(){
   if(blockIfNoEdit('finance')) return;
   const openingCash = Math.max(0, parseFloat(document.getElementById('cashOpening').value)||0);
-  await db.doc('settings/finance').set({openingCash});
+  const btn = document.getElementById('saveCashBtn');
+  if(btn) btn.disabled = true;
+  try{
+    await db.doc('settings/finance').set({openingCash});
+    toast('Opening cash balance saved.', 'ok');
+  } catch(e){
+    console.error('saveCashSettings failed', e);
+    toast(friendlyError(e));
+  } finally { if(btn) btn.disabled = !canWrite ? true : false; }
 }
 function renderFinance(){
   const kpiEl = document.getElementById('financeKpis');
