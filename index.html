@@ -214,6 +214,26 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 .paypill.partial{background:rgba(255,185,61,.15);color:var(--amber);border:1px solid rgba(255,185,61,.4);}
 .paypill.paid{background:rgba(89,230,160,.15);color:#6ee8ab;border:1px solid rgba(89,230,160,.4);}
 .nav-badge{margin-left:auto;background:linear-gradient(135deg,var(--orange),var(--pink));color:#fff;font-family:var(--mono);font-size:10.5px;font-weight:800;min-width:18px;height:18px;padding:0 5px;border-radius:999px;display:flex;align-items:center;justify-content:center;line-height:1;}
+.pos-layout{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start;}
+@media (max-width:900px){ .pos-layout{grid-template-columns:1fr;} }
+.pos-scanner{position:relative;width:100%;aspect-ratio:4/3;background:#000;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
+.pos-scanner video{width:100%;height:100%;object-fit:cover;display:block;}
+.pos-scan-frame{position:absolute;inset:14%;border:2px solid var(--lime);border-radius:10px;box-shadow:0 0 0 2000px rgba(0,0,0,.35);pointer-events:none;}
+.pos-scan-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:12.5px;text-align:center;padding:20px;}
+.pos-scan-actions{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;}
+.pos-quick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:8px;margin-top:14px;}
+.pos-tile{background:var(--glass);border:1px solid var(--border);border-radius:10px;padding:10px 8px;display:flex;flex-direction:column;gap:4px;align-items:center;cursor:pointer;color:#fff;font-family:inherit;}
+.pos-tile:hover{border-color:var(--cyan);}
+.pos-tile.soldout,.pos-tile:disabled{opacity:.4;cursor:not-allowed;}
+.pos-tile-name{font-size:12px;font-weight:700;text-align:center;}
+.pos-tile-price{font-size:11.5px;color:rgba(255,243,214,.7);}
+.pos-tile-soldout{font-size:10px;color:var(--pink);font-weight:700;}
+.pos-cart-col{display:flex;flex-direction:column;gap:12px;}
+.pos-cart-list{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;}
+.pos-cart-row{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;background:var(--glass);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12.5px;}
+.pos-cart-row-name{font-weight:700;}
+.pos-cart-totals{border-top:1px solid var(--border);padding-top:10px;font-weight:800;font-size:15px;display:flex;justify-content:space-between;}
+.pos-change{font-size:13px;display:flex;justify-content:space-between;padding:2px 0;min-height:18px;}
 .order-form .field label{display:block;font-family:var(--mono);font-size:10.5px;color:rgba(255,243,214,.5);margin-bottom:5px;}
 .order-form select,.order-form input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:#fff;font-size:13.5px;}
 .order-form .btn{grid-column:1/-1;}
@@ -361,6 +381,10 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
         <svg viewBox="0 0 20 20"><rect x="2" y="11" width="4" height="7" rx="1"/><rect x="8" y="6" width="4" height="12" rx="1"/><rect x="14" y="2" width="4" height="16" rx="1"/></svg>
         <span>Overview</span>
       </button>
+      <button data-view="pos">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="4" width="16" height="12" rx="1.5"/><path d="M5.2 7v6M7.4 7v6M9.6 7v6M11.3 7v6M13.5 7v6M15.2 7v6" stroke-width="1.3"/></svg>
+        <span>POS Terminal</span>
+      </button>
       <button data-view="inventory">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 6.5 10 2l8 4.5v7L10 18l-8-4.5z"/><path d="M2 6.5 10 11l8-4.5M10 11v7"/></svg>
         <span>Inventory</span>
@@ -457,6 +481,45 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     <div class="panel">
       <h2>Low stock <span class="sm">≤ threshold</span></h2>
       <div id="ovLowStock"></div>
+    </div>
+  </section>
+
+  <section class="view" id="v-pos">
+    <div class="panel">
+      <h2>POS Terminal <span class="sm">scan or tap to add items, checkout, print a receipt</span></h2>
+      <div class="pos-layout">
+        <div class="pos-scan-col">
+          <div class="pos-scanner" id="posScannerBox">
+            <video id="posScanVideo" playsinline muted></video>
+            <div class="pos-scan-frame" id="posScanFrame" style="display:none;"></div>
+            <div class="pos-scan-hint" id="posScanHint">Tap "Start camera" to scan a barcode</div>
+          </div>
+          <div class="pos-scan-actions">
+            <button class="btn" id="posScanToggleBtn" onclick="togglePosScanner()">Start camera</button>
+            <span class="sm mono" id="posScanStatus"></span>
+          </div>
+          <div class="field" style="margin-top:14px;">
+            <label>Or search by name / enter barcode</label>
+            <input type="text" id="posManualSearch" placeholder="Type a product name or barcode, press Enter" onkeydown="if(event.key==='Enter'){posManualLookup();}">
+          </div>
+          <div class="pos-quick-grid" id="posQuickGrid"></div>
+        </div>
+        <div class="pos-cart-col">
+          <h3 style="margin:0 0 4px;font-family:var(--mono);font-size:12px;color:rgba(255,243,214,.6);text-transform:uppercase;letter-spacing:.04em;">Current order</h3>
+          <div class="pos-cart-list" id="posCartList"></div>
+          <div class="pos-cart-totals" id="posCartTotals"></div>
+          <div class="field"><label>Customer name (optional)</label><input type="text" id="posCustomerName" placeholder="Walk-in"></div>
+          <div class="field"><label>Payment method</label>
+            <select id="posPayMethod" onchange="renderPosTotals()">
+              <option>Cash</option><option>GCash</option><option>Maya</option><option>Bank Transfer</option><option>Card</option>
+            </select>
+          </div>
+          <div class="field" id="posCashField"><label>Cash tendered</label><input type="number" id="posCashTendered" min="0" oninput="renderPosTotals()"></div>
+          <div class="pos-change" id="posChangeLine"></div>
+          <button class="btn" id="posCheckoutBtn" style="width:100%;" onclick="completePosSale()">Complete sale &amp; print receipt</button>
+          <button class="btn ghost" style="width:100%;margin-top:8px;" onclick="clearPosCart()">Clear cart</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -574,7 +637,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <h2>Product catalog <span class="sm">pricing, cost &amp; margin per flavor</span></h2>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>COGS</th><th>Gross profit</th><th>Margin</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Product</th><th>Barcode <span class="sm">for POS scanning</span></th><th>Category</th><th>Price</th><th>COGS</th><th>Gross profit</th><th>Margin</th><th>Status</th><th></th></tr></thead>
         <tbody id="prodBody"></tbody>
       </table>
       </div>
@@ -1102,6 +1165,7 @@ let db = null, user = null, canWrite = true;
 const ADMIN_EMAIL = 'jhon@chugjug.ph';
 const SECTIONS = [
   {key:'overview', label:'Overview'},
+  {key:'pos', label:'POS Terminal'},
   {key:'inventory', label:'Inventory'},
   {key:'sales', label:'Sales'},
   {key:'products', label:'Products'},
@@ -1180,6 +1244,15 @@ function applyPermissionUI(){
   if(activeHidden){
     const firstVisible = Array.from(navButtons).find(b=>b.style.display !== 'none');
     if(firstVisible) firstVisible.click();
+  }
+  // A "pure cashier" -- granted POS and nothing else -- should land straight
+  // on the terminal instead of an Overview tab with nothing to do.
+  if(!isAdminUser && canView('pos')){
+    const hasOtherSection = SECTIONS.some(s=>s.key!=='overview' && s.key!=='pos' && canView(s.key));
+    if(!hasOtherSection){
+      const posBtn = document.querySelector('.sidebar-nav button[data-view="pos"]');
+      if(posBtn && !posBtn.classList.contains('active')) posBtn.click();
+    }
   }
   SECTIONS.forEach(s=>{
     const view = document.getElementById('v-'+s.key);
@@ -2265,16 +2338,49 @@ async function toggleProductActive(id, active){
   if(blockIfNoEdit('products')) return;
   await db.doc('products/'+id).update({active});
 }
+
+async function setProductBarcode(id, value){
+  if(blockIfNoEdit('products')) return;
+  const barcode = (value||'').trim();
+  try{
+    await db.doc('products/'+id).update({barcode});
+    toast(barcode ? 'Barcode saved.' : 'Barcode cleared.', 'ok');
+  } catch(e){
+    console.error('setProductBarcode failed', e);
+    toast(friendlyError(e));
+  }
+}
+// Generates a scannable EAN-13-shaped code (prefix 200-299 is the standard
+// "restricted circulation / in-store use" range, so it never collides with
+// a real retail barcode) for products that don't have a manufacturer code.
+function generateBarcodeFor(id){
+  if(blockIfNoEdit('products')) return;
+  let digits = '2' + String(Math.floor(Math.random()*100)).padStart(2,'0');
+  for(let i=0;i<9;i++) digits += Math.floor(Math.random()*10);
+  let sum = 0;
+  for(let i=0;i<12;i++) sum += parseInt(digits[i]) * (i%2===0?1:3);
+  const check = (10 - (sum%10)) % 10;
+  const code = digits + check;
+  const input = document.getElementById('barcode_'+id);
+  if(input) input.value = code;
+  setProductBarcode(id, code);
+}
 function renderProducts(){
   const body = document.getElementById('prodBody');
   if(!body) return;
-  if(productsList.length===0){ body.innerHTML = '<tr><td colspan="8"><div class="empty">No products yet.</div></td></tr>'; return; }
+  if(productsList.length===0){ body.innerHTML = '<tr><td colspan="9"><div class="empty">No products yet.</div></td></tr>'; return; }
   body.innerHTML = productsList.map(p=>{
     const costing = computeCosting(p.id);
     const active = p.active!==false;
     return `
       <tr class="${!active?'lowstock':''}">
         <td>${p.name}</td>
+        <td>
+          <div style="display:flex;gap:4px;align-items:center;">
+            <input type="text" id="barcode_${p.id}" value="${p.barcode||''}" placeholder="— none —" class="mono" style="width:110px;" onchange="setProductBarcode('${p.id}', this.value)">
+            <button class="btn ghost" style="padding:6px 8px;font-size:11px;" onclick="generateBarcodeFor('${p.id}')">gen</button>
+          </div>
+        </td>
         <td>${p.category||'—'}</td>
         <td class="mono">${fmtPeso(p.sellingPrice||0)}</td>
         <td class="mono">${fmtPeso(costing.cogs)}</td>
@@ -2435,6 +2541,9 @@ document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeMobileNav(
 
 document.querySelectorAll('.sidebar-nav button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    // Stop the camera the moment we leave the POS tab, so it never keeps
+    // recording in the background on another screen.
+    if(btn.dataset.view!=='pos' && typeof stopPosScanner==='function') stopPosScanner();
     document.querySelectorAll('.sidebar-nav button').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     btn.classList.add('active');
@@ -2586,6 +2695,7 @@ async function startApp(){
     renderOverview();
     updateSaleRevenue();
     renderAlerts();
+    renderPosCart();
   }, err=>console.error('inventory', err));
 
   db.collection('sales').orderBy('ts','desc').limit(500).onSnapshot(snap=>{
@@ -2640,6 +2750,7 @@ async function startApp(){
     refreshBatchDropdown();
     renderFlavorAnalytics();
     renderAlerts();
+    renderPosCart();
   }, err=>console.error('products', err));
 
   db.collection('components').onSnapshot(snap=>{
@@ -3057,6 +3168,342 @@ async function deductComponentsForOrder(productId, productName, qty, orderNo){
       qty:used, direction:'out', reason:'SALE', reference:orderNo, notes:''
     });
   }
+}
+
+// --- POS Terminal ---------------------------------------------------------
+// A cashier granted only 'pos' edit access (see SECTIONS/Team & Access)
+// lands straight here: scan a barcode (camera) or tap/search a product,
+// build a cart, take payment, write the sale, and print an 80mm receipt.
+let posCart = {}; // productId -> qty
+let posScanning = false;
+let posMediaStream = null;
+let posBarcodeDetector = null;
+let posZXingReader = null;
+let posScanRAF = null;
+let zxingLoadPromise = null;
+
+function posCartSubtotal(){
+  return Object.entries(posCart).reduce((sum,[id,qty])=>{
+    const inv = inventory[id] || {};
+    const p = productsList.find(x=>x.id===id) || {};
+    const price = inv.price!=null ? inv.price : (p.sellingPrice||0);
+    return sum + price*qty;
+  }, 0);
+}
+
+function posAddItem(productId, qty){
+  qty = qty||1;
+  const p = productsList.find(x=>x.id===productId);
+  if(!p){ toast('Product not found.'); return; }
+  if(p.active===false){ toast(`${p.name} is inactive.`); return; }
+  const stock = (inventory[productId]&&inventory[productId].stock) || 0;
+  const already = posCart[productId]||0;
+  if(already>=stock){ toast(`Only ${stock} ${p.name} in stock.`); return; }
+  const next = Math.min(stock, already+qty);
+  posCart[productId] = next;
+  renderPosCart();
+}
+function posChangeQty(productId, delta){
+  const stock = (inventory[productId]&&inventory[productId].stock) || 0;
+  const next = (posCart[productId]||0) + delta;
+  if(delta>0 && next>stock){ toast('Not enough stock.'); return; }
+  if(next<=0) delete posCart[productId]; else posCart[productId] = next;
+  renderPosCart();
+}
+function posRemoveItem(productId){ delete posCart[productId]; renderPosCart(); }
+function clearPosCart(){ posCart = {}; renderPosCart(); }
+
+function posManualLookup(){
+  const input = document.getElementById('posManualSearch');
+  const q = (input.value||'').trim();
+  if(!q) return;
+  const qLower = q.toLowerCase();
+  let product = productsList.find(p=>p.barcode && p.barcode===q);
+  if(!product) product = productsList.find(p=>p.active!==false && p.name && p.name.toLowerCase().includes(qLower));
+  if(!product){ toast(`No product matches "${q}".`); return; }
+  posAddItem(product.id, 1);
+  input.value = '';
+}
+
+function renderPosQuickGrid(){
+  const grid = document.getElementById('posQuickGrid');
+  if(!grid) return;
+  const items = productsList.filter(p=>p.active!==false);
+  if(!items.length){ grid.innerHTML = '<div class="empty">No active products yet.</div>'; return; }
+  grid.innerHTML = items.map(p=>{
+    const inv = inventory[p.id] || {};
+    const price = inv.price!=null ? inv.price : (p.sellingPrice||0);
+    const stock = inv.stock||0;
+    const soldOut = stock<=0;
+    return `<button class="pos-tile ${soldOut?'soldout':''}" ${soldOut?'disabled':''} onclick="posAddItem('${p.id}',1)">
+      <span class="pos-tile-name">${p.name}</span>
+      <span class="pos-tile-price mono">${fmtPeso(price)}</span>
+      ${soldOut?'<span class="pos-tile-soldout">Sold out</span>':`<span class="pos-tile-price">${stock} in stock</span>`}
+    </button>`;
+  }).join('');
+}
+
+function renderPosCart(){
+  const list = document.getElementById('posCartList');
+  if(!list) return;
+  const entries = Object.entries(posCart);
+  if(!entries.length){
+    list.innerHTML = '<div class="empty">Cart is empty — scan, search, or tap a product.</div>';
+  } else {
+    list.innerHTML = entries.map(([id,qty])=>{
+      const p = productsList.find(x=>x.id===id) || {name:id};
+      const inv = inventory[id] || {};
+      const price = inv.price!=null ? inv.price : (p.sellingPrice||0);
+      return `<div class="pos-cart-row">
+        <div class="pos-cart-row-name">${p.name}</div>
+        <div class="numcell">
+          <button class="stepbtn" onclick="posChangeQty('${id}',-1)">−</button>
+          <span class="mono">${qty}</span>
+          <button class="stepbtn" onclick="posChangeQty('${id}',1)">+</button>
+        </div>
+        <div class="mono">${fmtPeso(price*qty)}</div>
+        <button class="btn ghost" onclick="posRemoveItem('${id}')">×</button>
+      </div>`;
+    }).join('');
+  }
+  renderPosQuickGrid();
+  renderPosTotals();
+}
+
+function renderPosTotals(){
+  const subtotal = posCartSubtotal();
+  const totalsEl = document.getElementById('posCartTotals');
+  if(totalsEl) totalsEl.innerHTML = `<span>Total</span><span class="mono">${fmtPeso(subtotal)}</span>`;
+  const methodEl = document.getElementById('posPayMethod');
+  const method = methodEl ? methodEl.value : 'Cash';
+  const cashField = document.getElementById('posCashField');
+  const changeLine = document.getElementById('posChangeLine');
+  if(cashField) cashField.style.display = method==='Cash' ? '' : 'none';
+  if(changeLine){
+    if(method==='Cash'){
+      const tendered = parseFloat((document.getElementById('posCashTendered')||{}).value)||0;
+      const change = tendered - subtotal;
+      changeLine.innerHTML = tendered>0
+        ? `<span>${change>=0?'Change':'Short by'}</span><span class="mono" style="color:${change>=0?'var(--lime)':'var(--pink)'};">${fmtPeso(Math.abs(change))}</span>`
+        : '';
+    } else { changeLine.innerHTML = ''; }
+  }
+}
+
+async function completePosSale(){
+  if(blockIfNoEdit('pos')) return;
+  const entries = Object.entries(posCart);
+  if(!entries.length){ toast('Cart is empty.'); return; }
+  const subtotal = posCartSubtotal();
+  const method = document.getElementById('posPayMethod').value;
+  const custNameRaw = document.getElementById('posCustomerName').value.trim();
+  const custName = custNameRaw || 'Walk-in';
+  let tendered = null, change = null;
+  if(method==='Cash'){
+    tendered = parseFloat(document.getElementById('posCashTendered').value)||0;
+    if(tendered < subtotal){ toast('Cash tendered is less than the total.'); return; }
+    change = tendered - subtotal;
+  }
+  const btn = document.getElementById('posCheckoutBtn');
+  btn.disabled = true;
+  try{
+    const customer = custNameRaw ? await findOrCreateCustomer(custNameRaw, '', '', 'Unspecified', '') : null;
+    const orderNo = nextOrderNo();
+    const receiptItems = [];
+    for(const [id, qty] of entries){
+      const p = productsList.find(x=>x.id===id) || {id, name:id};
+      const inv = inventory[id] || {};
+      const price = inv.price!=null ? inv.price : (p.sellingPrice||0);
+      const revenue = price*qty;
+      await db.collection('sales').add({
+        orderNo, flavorId:id, flavorName:p.name, qty, unitPrice:price, revenue, total:revenue, discount:0, deliveryFee:0,
+        date: todayStr(), region:'', regionName:'Walk-in',
+        customerId: customer?customer.id:null, customerName: customer?customer.name:custName,
+        paymentMethod:method, paymentStatus:'PAID', orderStatus:'DELIVERED', deliveryStatus:'DELIVERED', rider:'',
+        notes:'POS sale', ts:Date.now()
+      });
+      const curStock = (inventory[id]&&inventory[id].stock) || 0;
+      await db.doc('inventory/'+id).update({stock: Math.max(0, curStock-qty)});
+      await deductComponentsForOrder(id, p.name, qty, orderNo);
+      receiptItems.push({name:p.name, qty, price, lineTotal:revenue});
+    }
+    logActivity(`POS sale ${orderNo} (${custName}) — ${fmtPeso(subtotal)}`);
+    toast(`Sale ${orderNo} completed.`, 'ok');
+    printPosReceipt({orderNo, items:receiptItems, subtotal, method, customerName:custName, tendered, change, cashier: currentUserEmail, ts:Date.now()});
+    posCart = {};
+    document.getElementById('posCustomerName').value = '';
+    document.getElementById('posCashTendered').value = '';
+    renderPosCart();
+  } catch(e){
+    console.error('completePosSale failed', e);
+    toast(friendlyError(e));
+  } finally { btn.disabled = !canWrite ? true : false; }
+}
+
+function buildPosReceiptHTML(sale){
+  const logoSrc = (document.querySelector('.head-logo')||{}).src || '';
+  const when = new Date(sale.ts||Date.now()).toLocaleString('en-PH',{dateStyle:'medium', timeStyle:'short'});
+  const rows = sale.items.map(it=>`
+    <tr><td colspan="2" style="padding-top:6px;">${it.name}</td></tr>
+    <tr><td>${it.qty} × ${fmtPeso2(it.price)}</td><td class="r">${fmtPeso2(it.lineTotal)}</td></tr>`).join('');
+  const payLine = (sale.method==='Cash' && sale.tendered!=null)
+    ? `<tr><td>Cash tendered</td><td class="r">${fmtPeso2(sale.tendered)}</td></tr><tr><td>Change</td><td class="r">${fmtPeso2(sale.change)}</td></tr>`
+    : '';
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><title>Receipt ${sale.orderNo}</title>
+<style>
+  *{box-sizing:border-box;}
+  body{font-family:'Courier New',monospace;width:80mm;margin:0 auto;padding:6mm;color:#111;font-size:12px;}
+  .rc-logo{display:block;width:40px;height:40px;margin:0 auto 6px;border-radius:8px;object-fit:cover;}
+  h1{font-size:15px;text-align:center;margin:0 0 2px;}
+  .rc-sub{text-align:center;font-size:10.5px;margin:0 0 10px;color:#333;}
+  .rc-line{border-top:1px dashed #999;margin:8px 0;}
+  table{width:100%;border-collapse:collapse;}
+  td{padding:1px 0;font-size:11.5px;}
+  td.r{text-align:right;}
+  .rc-total td{font-weight:700;font-size:13px;border-top:1px solid #111;padding-top:6px;}
+  .rc-foot{text-align:center;margin-top:14px;font-size:10.5px;color:#333;}
+  @media print{ body{padding:3mm;} }
+</style></head>
+<body>
+  ${logoSrc?`<img src="${logoSrc}" class="rc-logo" alt="">`:''}
+  <h1>${CHUGJUG_BIZ.name}</h1>
+  <div class="rc-sub">${CHUGJUG_BIZ.addressLine1}<br>${CHUGJUG_BIZ.phone}</div>
+  <div class="rc-line"></div>
+  <table>
+    <tr><td>Order</td><td class="r">${sale.orderNo}</td></tr>
+    <tr><td>Date</td><td class="r">${when}</td></tr>
+    <tr><td>Cashier</td><td class="r">${sale.cashier||'—'}</td></tr>
+    <tr><td>Customer</td><td class="r">${sale.customerName||'Walk-in'}</td></tr>
+  </table>
+  <div class="rc-line"></div>
+  <table>${rows}</table>
+  <div class="rc-line"></div>
+  <table>
+    <tr class="rc-total"><td>Total</td><td class="r">${fmtPeso2(sale.subtotal)}</td></tr>
+    <tr><td>Payment</td><td class="r">${sale.method}</td></tr>
+    ${payLine}
+  </table>
+  <div class="rc-foot">Thank you for your order!<br>One Jug. One Party.</div>
+</body></html>`;
+}
+
+function printPosReceipt(sale){
+  const html = buildPosReceiptHTML(sale);
+  const win = window.open('', '_blank');
+  if(!win){ toast('Your browser blocked the new tab — please allow pop-ups to print receipts.'); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+  win.addEventListener('load', ()=>{ win.focus(); win.print(); });
+  setTimeout(()=>{ try{ win.focus(); win.print(); }catch(e){} }, 400);
+}
+
+// --- Barcode camera scanning: native BarcodeDetector where available,
+// falling back to the ZXing library (loaded from CDN on first use) ---------
+async function togglePosScanner(){
+  if(posScanning){ stopPosScanner(); return; }
+  if(blockIfNoEdit('pos')) return;
+  const video = document.getElementById('posScanVideo');
+  const statusEl = document.getElementById('posScanStatus');
+  const hint = document.getElementById('posScanHint');
+  const frame = document.getElementById('posScanFrame');
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    toast('Camera scanning is not available on this browser/device. Use manual search instead.');
+    return;
+  }
+  try{
+    posMediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = posMediaStream;
+    await video.play();
+    posScanning = true;
+    document.getElementById('posScanToggleBtn').textContent = 'Stop camera';
+    if(hint) hint.style.display = 'none';
+    if(frame) frame.style.display = '';
+    if(statusEl) statusEl.textContent = 'Scanning…';
+    await startPosDetection(video);
+  } catch(e){
+    console.error('camera start failed', e);
+    toast('Could not access the camera. Check permissions, or use manual search below.');
+    stopPosScanner();
+  }
+}
+
+function stopPosScanner(){
+  posScanning = false;
+  if(posScanRAF) cancelAnimationFrame(posScanRAF);
+  posScanRAF = null;
+  if(posZXingReader){ try{ posZXingReader.reset(); }catch(e){} posZXingReader = null; }
+  if(posMediaStream){ posMediaStream.getTracks().forEach(t=>t.stop()); posMediaStream = null; }
+  const video = document.getElementById('posScanVideo');
+  if(video) video.srcObject = null;
+  const btn = document.getElementById('posScanToggleBtn');
+  if(btn) btn.textContent = 'Start camera';
+  const hint = document.getElementById('posScanHint');
+  if(hint) hint.style.display = '';
+  const frame = document.getElementById('posScanFrame');
+  if(frame) frame.style.display = 'none';
+  const statusEl = document.getElementById('posScanStatus');
+  if(statusEl) statusEl.textContent = '';
+}
+
+async function startPosDetection(video){
+  if('BarcodeDetector' in window){
+    try{
+      if(!posBarcodeDetector){
+        posBarcodeDetector = new window.BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code','codabar','itf']});
+      }
+      const tick = async ()=>{
+        if(!posScanning) return;
+        try{
+          const codes = await posBarcodeDetector.detect(video);
+          if(codes && codes.length) handlePosScanResult(codes[0].rawValue);
+        } catch(e){ /* transient per-frame detection errors are expected, ignore */ }
+        posScanRAF = requestAnimationFrame(tick);
+      };
+      posScanRAF = requestAnimationFrame(tick);
+      return;
+    } catch(e){ console.warn('BarcodeDetector unavailable, falling back to ZXing', e); }
+  }
+  try{
+    await loadZXingLibrary();
+    const ZXing = window.ZXing;
+    posZXingReader = new ZXing.BrowserMultiFormatReader();
+    posZXingReader.decodeFromVideoElement(video, (result)=>{
+      if(result) handlePosScanResult(result.getText());
+    });
+  } catch(e){
+    console.error('ZXing fallback failed to load', e);
+    toast('Barcode scanning library failed to load — use manual search instead.');
+  }
+}
+
+function loadZXingLibrary(){
+  if(window.ZXing) return Promise.resolve();
+  if(zxingLoadPromise) return zxingLoadPromise;
+  zxingLoadPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Failed to load barcode scanner library'));
+    document.head.appendChild(s);
+  });
+  return zxingLoadPromise;
+}
+
+let lastPosScanCode = null, lastPosScanTime = 0;
+function handlePosScanResult(code){
+  if(!code) return;
+  const now = Date.now();
+  if(code===lastPosScanCode && (now-lastPosScanTime)<1500) return; // debounce repeat frames
+  lastPosScanCode = code; lastPosScanTime = now;
+  const statusEl = document.getElementById('posScanStatus');
+  const product = productsList.find(p=>p.barcode && p.barcode===code);
+  if(!product){
+    if(statusEl) statusEl.textContent = 'Unrecognized code: ' + code;
+    toast('No product matches that barcode.');
+    return;
+  }
+  posAddItem(product.id, 1);
+  if(statusEl) statusEl.textContent = 'Added: ' + product.name;
 }
 
 async function logSale(){
