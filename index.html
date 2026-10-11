@@ -930,6 +930,25 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       </table>
       </div>
     </div>
+    <div class="panel">
+      <h2>Promo codes <span class="sm">usable by customers at storefront checkout</span></h2>
+      <div class="form-row">
+        <div class="field"><label>Code</label><input type="text" id="promoCode" placeholder="e.g. WELCOME10" style="text-transform:uppercase;"></div>
+        <div class="field"><label>Type</label>
+          <select id="promoType"><option value="percent">% off</option><option value="fixed">₱ off</option></select>
+        </div>
+        <div class="field"><label>Value</label><input type="number" id="promoValue" min="0" value="0"></div>
+        <div class="field"><label>Max uses (optional)</label><input type="number" id="promoMaxUses" min="1" placeholder="unlimited"></div>
+        <div class="field"><label>Expires (optional)</label><input type="date" id="promoExpiresAt"></div>
+        <button class="btn" id="addPromoBtn" onclick="addPromoCode()">Add code</button>
+      </div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>Code</th><th>Discount</th><th>Used</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+        <tbody id="promoBody"></tbody>
+      </table>
+      </div>
+    </div>
   </section>
 
   <section class="view" id="v-customers">
@@ -1467,6 +1486,7 @@ let movementsList = [];   // {id, ts, itemType, itemId, itemName, qty, direction
 let expensesList = [];    // {id, date, category, amount, paymentMethod, notes, ts, source, recurringExpenseId}
 let expenseBudgetsList = []; // {id, category, monthlyBudget, ts}
 let recurringExpensesList = []; // {id, category, amount, paymentMethod, notes, dayOfMonth, active, lastRunMonth, ts}
+let promoCodesList = []; // {id, code, discountType, discountValue, active, maxUses, usedCount, expiresAt, ts}
 let purchaseOrdersList = []; // {id, poNo, supplierId, supplierName, status, items:[{componentId,componentName,qty,unitCost}], totalCost, orderedDate, receivedDate, notes, ts}
 let poDraftItems = [];    // in-memory, not persisted until the PO is created
 let cashSettings = { openingCash: 0 };
@@ -1852,6 +1872,70 @@ async function runDueRecurringExpenses(){
       console.error('runDueRecurringExpenses failed for', r.id, e);
     } finally { recurringRunInFlight.delete(r.id); }
   }
+}
+
+// --- Promo codes ---------------------------------------------------------
+// Managed here, validated/redeemed from the storefront through the
+// validate_promo_code / redeem_promo_code RPCs (security-definer, so the
+// storefront's anon key never needs direct read/write access to this table).
+async function addPromoCode(){
+  if(blockIfNoEdit('finance')) return;
+  const code = document.getElementById('promoCode').value.trim().toUpperCase();
+  const discountType = document.getElementById('promoType').value;
+  const discountValue = Math.max(0, parseFloat(document.getElementById('promoValue').value)||0);
+  const maxUsesRaw = document.getElementById('promoMaxUses').value;
+  const maxUses = maxUsesRaw ? Math.max(1, parseInt(maxUsesRaw)||1) : null;
+  const expiresAt = document.getElementById('promoExpiresAt').value || null;
+  if(!code){ toast('Enter a code.'); return; }
+  if(discountValue<=0){ toast('Enter a discount value greater than zero.'); return; }
+  if(promoCodesList.some(p=>(p.code||'').toUpperCase()===code)){ toast('That code already exists.'); return; }
+  const btn = document.getElementById('addPromoBtn');
+  btn.disabled = true;
+  try{
+    await db.collection('promo_codes').add({code, discountType, discountValue, active:true, maxUses, usedCount:0, expiresAt, ts:Date.now()});
+    document.getElementById('promoCode').value = '';
+    document.getElementById('promoValue').value = 0;
+    document.getElementById('promoMaxUses').value = '';
+    document.getElementById('promoExpiresAt').value = '';
+    toast(`Promo code ${code} added.`, 'ok');
+    logActivity(`Promo code added: ${code} (${discountType==='percent'?discountValue+'% off':fmtPeso(discountValue)+' off'})`);
+  } catch(e){
+    console.error('addPromoCode failed', e);
+    toast(friendlyError(e));
+  } finally { btn.disabled = false; }
+}
+async function togglePromoActive(id, active){
+  if(blockIfNoEdit('finance')) return;
+  await db.doc('promo_codes/'+id).update({active});
+}
+async function deletePromoCode(id){
+  if(blockIfNoEdit('finance')) return;
+  await db.doc('promo_codes/'+id).delete();
+}
+function renderPromoCodes(){
+  const body = document.getElementById('promoBody');
+  if(!body) return;
+  if(!promoCodesList.length){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No promo codes yet.</div></td></tr>'; return; }
+  body.innerHTML = promoCodesList.map(p=>{
+    const discountLabel = p.discountType==='percent' ? `${p.discountValue}% off` : `${fmtPeso(p.discountValue||0)} off`;
+    const usedLabel = p.maxUses!=null ? `${p.usedCount||0} / ${p.maxUses}` : `${p.usedCount||0}`;
+    const expired = p.expiresAt && p.expiresAt < todayStr();
+    const exhausted = p.maxUses!=null && (p.usedCount||0) >= p.maxUses;
+    const statusLabel = !p.active ? 'paused' : expired ? 'expired' : exhausted ? 'exhausted' : 'active';
+    const statusPill = statusLabel==='active' ? 'ok' : 'low';
+    return `
+      <tr>
+        <td class="mono">${p.code}</td>
+        <td>${discountLabel}</td>
+        <td class="mono">${usedLabel}</td>
+        <td class="mono sm">${p.expiresAt||'—'}</td>
+        <td><span class="pill ${statusPill}">${statusLabel}</span></td>
+        <td>
+          <button class="btn ghost" onclick="togglePromoActive('${p.id}', ${!p.active})">${p.active?'pause':'resume'}</button>
+          <button class="btn ghost" onclick="deletePromoCode('${p.id}')">delete</button>
+        </td>
+      </tr>`;
+  }).join('');
 }
 
 // --- Purchase orders (supplier purchasing) ----------------------------------
@@ -3152,6 +3236,11 @@ async function startApp(){
     runDueRecurringExpenses();
   }, err=>console.error('recurring_expenses', err));
 
+  db.collection('promo_codes').orderBy('ts','desc').onSnapshot(snap=>{
+    promoCodesList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderPromoCodes();
+  }, err=>console.error('promo_codes', err));
+
   db.collection('purchase_orders').orderBy('ts','desc').onSnapshot(snap=>{
     purchaseOrdersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderPurchaseOrders();
@@ -3400,13 +3489,14 @@ function renderOnlineOrders(){
       <div class="weborder">
         <div class="wo-head">
           <strong>${o.customerName||'Website order'}</strong>
-          <span class="sm mono">₱${Number(o.subtotal||0).toLocaleString()} · ${when}</span>
+          <span class="sm mono">₱${Number(o.subtotal||0).toLocaleString()}${o.discount?` − ${fmtPeso(o.discount)}`:''} · ${when}</span>
         </div>
-        <div class="wo-items">${itemsText||'No items'}</div>
+        <div class="wo-items">${itemsText||'No items'}${o.orderNo?` <span class="sm mono">(${o.orderNo})</span>`:''}</div>
         <div class="wo-cust">
           ${o.customerEmail?`Email: ${o.customerEmail}<br>`:''}
           ${o.customerPhone?`Phone: ${o.customerPhone}<br>`:''}
           ${o.customerAddress?`Address: ${o.customerAddress}<br>`:''}
+          ${o.promoCode?`Promo: ${o.promoCode} (-${fmtPeso(o.discount||0)})<br>`:''}
           ${o.notes?`Notes: ${o.notes}`:''}
         </div>
         <div class="wo-pay">
@@ -3435,18 +3525,27 @@ async function confirmOnlineOrder(id){
     const combinedNotes = [addressNote, ord.notes||''].filter(Boolean).join(' | ');
     const payMethod = ord.paymentMethod || 'GCash/Maya QR';
     const payStatus = ord.paymentStatus || 'UNPAID';
+    // The storefront applies a promo code to the whole order (one discount
+    // amount off the subtotal), but each item becomes its own sales row —
+    // prorate the discount across items by their share of the subtotal so
+    // the per-line totals still add back up to subtotal-minus-discount.
+    const orderDiscount = Math.max(0, ord.discount||0);
+    const discFraction = ord.subtotal>0 ? orderDiscount/ord.subtotal : 0;
+    const promoNote = ord.promoCode ? `Promo: ${ord.promoCode} (-${fmtPeso(orderDiscount)})` : '';
+    const notesWithPromo = [combinedNotes, promoNote].filter(Boolean).join(' | ');
     for(const it of items){
       const f = activeProducts().find(x=>x.id===it.flavorId) || {id:it.flavorId, name:it.name||it.flavorId, price:it.unitPrice||0};
       const qty = Math.max(0, it.qty||0);
       if(!qty) continue;
       const price = it.unitPrice!=null ? it.unitPrice : ((inventory[f.id]&&inventory[f.id].price!=null) ? inventory[f.id].price : f.price||0);
       const revenue = qty*price;
+      const lineDiscount = Math.round(revenue*discFraction);
       await db.collection('sales').add({
-        orderNo, flavorId:f.id, flavorName: it.name||f.name, qty, unitPrice:price, revenue, total:revenue, discount:0, deliveryFee:0,
+        orderNo, flavorId:f.id, flavorName: it.name||f.name, qty, unitPrice:price, revenue, total:revenue-lineDiscount, discount:lineDiscount, deliveryFee:0,
         date: todayStr(), region:'', regionName:'Unspecified',
         customerId: customer?customer.id:null, customerName: customer?customer.name:(ord.customerName||'Online order'),
         paymentMethod:payMethod, paymentStatus:payStatus, orderStatus:'NEW', deliveryStatus:'PENDING', rider:'',
-        notes: combinedNotes, ts:Date.now()
+        notes: notesWithPromo, ts:Date.now()
       });
       const curStock = (inventory[f.id]&&inventory[f.id].stock) || 0;
       await db.doc('inventory/'+f.id).update({stock: Math.max(0, curStock - qty)});
