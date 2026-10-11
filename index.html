@@ -581,10 +581,14 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <h2>Component stock <span class="sm" id="compCount"></span></h2>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Component</th><th>Category</th><th>Stock</th><th>Low at</th><th>Cost/unit</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Component</th><th>Category</th><th>Stock</th><th>Low at</th><th>Cost/unit</th><th>Preferred supplier</th><th>Status</th><th></th></tr></thead>
         <tbody id="compBody"></tbody>
       </table>
       </div>
+    </div>
+    <div class="panel">
+      <h2>Reorder suggestions <span class="sm">components projected to run out within 2 weeks, based on the last 14 days of usage</span></h2>
+      <div id="reorderSuggestions"></div>
     </div>
     <div class="panel">
       <h2>Recent stock movements <span class="sm">most recent first</span></h2>
@@ -694,6 +698,10 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     <div class="modal-box" id="shiftModalBox" style="max-width:380px;"></div>
   </div>
 
+  <div class="modal" id="releaseBatchModal">
+    <div class="modal-box" id="releaseBatchModalBox" style="max-width:380px;"></div>
+  </div>
+
   <section class="view" id="v-production">
     <div class="panel">
       <h2>New production batch <span class="sm" id="batchNoPreview"></span></h2>
@@ -709,7 +717,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <h2>Batches <span class="sm" id="batchCount"></span></h2>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Batch #</th><th>Product</th><th>Qty</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Batch #</th><th>Product</th><th>Qty</th><th>Yield</th><th>Status</th><th></th></tr></thead>
         <tbody id="batchBody"></tbody>
       </table>
       </div>
@@ -1578,10 +1586,15 @@ async function deleteComponent(id){
   if(blockIfNoEdit('inventory')) return;
   await db.doc('components/'+id).delete();
 }
+async function setComponentPreferredSupplier(id, supplierId){
+  if(blockIfNoEdit('inventory')) return;
+  await db.doc('components/'+id).update({preferredSupplierId: supplierId||null});
+}
 function renderComponents(){
   const body = document.getElementById('compBody');
   document.getElementById('compCount').textContent = componentsList.length + ' tracked';
-  if(componentsList.length===0){ body.innerHTML = '<tr><td colspan="7"><div class="empty">No components added yet.</div></td></tr>'; return; }
+  if(componentsList.length===0){ body.innerHTML = '<tr><td colspan="8"><div class="empty">No components added yet.</div></td></tr>'; renderReorderSuggestions(); return; }
+  const supplierOptions = `<option value="">— none —</option>` + suppliersList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   body.innerHTML = componentsList.map(c=>{
     const low = (c.stock||0) <= (c.lowThreshold||0);
     return `
@@ -1594,10 +1607,77 @@ function renderComponents(){
         </div></td>
         <td><input type="number" value="${c.lowThreshold||0}" style="width:52px" class="mono" onchange="setComponentLow('${c.id}', this.value)"></td>
         <td class="pricecell"><input type="number" value="${c.costPerUnit||0}" step="0.01" onchange="setComponentCost('${c.id}', this.value)"></td>
+        <td><select onchange="setComponentPreferredSupplier('${c.id}', this.value)">${supplierOptions.replace(`value="${c.preferredSupplierId||''}"`, `value="${c.preferredSupplierId||''}" selected`)}</select></td>
         <td><span class="pill ${low?'low':'ok'}">${low?'low stock':'ok'}</span></td>
         <td><button class="btn ghost" onclick="deleteComponent('${c.id}')">delete</button></td>
       </tr>`;
   }).join('');
+  renderReorderSuggestions();
+}
+
+// --- Reorder suggestions -----------------------------------------------------
+// Estimates how many days of stock each component has left from its recent
+// consumption rate (sales + production use, pulled from inventory_movements),
+// and flags anything projected to run dry within two weeks. A component with
+// no recent usage can't have a rate estimated, so it's left out rather than
+// shown with a misleading "days left".
+const REORDER_LOOKBACK_DAYS = 14;
+const REORDER_COVERAGE_DAYS = 30;
+const REORDER_FLAG_DAYS = 14;
+function computeReorderSuggestions(){
+  const cutoff = Date.now() - REORDER_LOOKBACK_DAYS*24*60*60*1000;
+  const usage = {};
+  movementsList.forEach(m=>{
+    if(m.itemType==='component' && m.direction==='out' && (m.ts||0)>=cutoff){
+      usage[m.itemId] = (usage[m.itemId]||0) + (m.qty||0);
+    }
+  });
+  return componentsList.map(c=>{
+    const totalOut = usage[c.id]||0;
+    const avgDaily = totalOut/REORDER_LOOKBACK_DAYS;
+    const daysLeft = avgDaily>0 ? (c.stock||0)/avgDaily : null;
+    const suggestedQty = avgDaily>0 ? Math.max(1, Math.ceil(avgDaily*REORDER_COVERAGE_DAYS - (c.stock||0))) : 0;
+    return { id:c.id, name:c.name, unit:c.unit, stock:c.stock||0, costPerUnit:c.costPerUnit||0,
+      preferredSupplierId:c.preferredSupplierId||'', avgDaily, daysLeft, suggestedQty };
+  }).filter(c=>c.daysLeft!=null && c.daysLeft<=REORDER_FLAG_DAYS)
+    .sort((a,b)=>a.daysLeft-b.daysLeft);
+}
+function renderReorderSuggestions(){
+  const el = document.getElementById('reorderSuggestions');
+  if(!el) return;
+  const items = computeReorderSuggestions();
+  if(!items.length){ el.innerHTML = '<div class="empty">Nothing projected to run out in the next two weeks.</div>'; return; }
+  el.innerHTML = items.map(c=>`
+    <div class="bar-row" style="margin-bottom:12px;align-items:center;gap:12px;">
+      <span>${c.name} — <span style="color:${c.daysLeft<=3?'var(--pink)':'var(--orange)'};font-weight:700;">${c.daysLeft.toFixed(1)} days left</span>
+        <span class="sm" style="color:rgba(255,243,214,.5);"> (${c.avgDaily.toFixed(1)} ${c.unit}/day used, ${c.stock} ${c.unit} on hand)</span></span>
+      <button class="btn ghost" onclick="startPoFromComponent('${c.id}', ${c.suggestedQty})">reorder ${c.suggestedQty} ${c.unit}</button>
+    </div>`).join('');
+}
+
+// One click from a reorder suggestion (or the component table) straight into
+// a pre-filled purchase-order draft, instead of re-typing the same component,
+// quantity and cost into the Suppliers tab by hand.
+function startPoFromComponent(componentId, suggestedQty){
+  if(blockIfNoEdit('suppliers')) return;
+  const comp = componentsList.find(c=>c.id===componentId);
+  if(!comp) return;
+  const suppliersBtn = document.querySelector('.sidebar-nav button[data-view="suppliers"]');
+  if(suppliersBtn) suppliersBtn.click();
+  setTimeout(()=>{
+    if(comp.preferredSupplierId){
+      const suppSel = document.getElementById('poSupplier');
+      if(suppSel && [...suppSel.options].some(o=>o.value===comp.preferredSupplierId)) suppSel.value = comp.preferredSupplierId;
+    }
+    const compSel = document.getElementById('poItemComponent');
+    if(compSel) compSel.value = componentId;
+    const qtyInput = document.getElementById('poItemQty');
+    if(qtyInput) qtyInput.value = Math.max(1, Math.ceil(suggestedQty||1));
+    const costInput = document.getElementById('poItemCost');
+    if(costInput) costInput.value = comp.costPerUnit||0;
+    addPoDraftItem();
+    toast(`${comp.name} added to a new purchase order draft below.`, 'ok');
+  }, 30);
 }
 
 const MOVE_DIR_LABEL = { in:'+ in', out:'− out' };
@@ -2223,13 +2303,21 @@ const BATCH_PILL = { PLANNED:'low', PREPARING:'low', READY:'low', RELEASED:'ok',
 // Releasing a batch is production happening for real: it deducts the
 // recipe's components and adds the finished units to inventory, logging a
 // movement for each — guarded so a batch can never be released twice.
-async function releaseBatch(batch){
+// Components are always deducted for the full planned quantity (that's what
+// was actually attempted/consumed); the amount credited to finished-goods
+// inventory is the actual output, which can come in lower than planned —
+// that gap is the batch's yield/waste.
+async function releaseBatch(batch, actualQty, releaseNotes){
   if(blockIfNoEdit('production')) return;
+  const planned = batch.qty||0;
+  const actual = actualQty!=null ? Math.max(0, actualQty) : planned;
+  const wasteQty = Math.max(0, planned-actual);
+  const yieldPct = planned>0 ? (actual/planned*100) : 100;
   const items = recipeItemsList.filter(r=>r.productId===batch.productId);
   for(const item of items){
     const comp = componentsList.find(c=>c.id===item.componentId);
     if(!comp) continue;
-    const used = item.qtyPerUnit*batch.qty;
+    const used = item.qtyPerUnit*planned;
     await db.doc('components/'+comp.id).update({stock: Math.max(0, (comp.stock||0)-used)});
     await db.collection('inventory_movements').add({
       ts:Date.now(), itemType:'component', itemId:comp.id, itemName:comp.name,
@@ -2237,13 +2325,60 @@ async function releaseBatch(batch){
     });
   }
   const curStock = (inventory[batch.productId]&&inventory[batch.productId].stock) || 0;
-  await db.doc('inventory/'+batch.productId).update({stock: curStock + batch.qty});
+  await db.doc('inventory/'+batch.productId).update({stock: curStock + actual});
   await db.collection('inventory_movements').add({
     ts:Date.now(), itemType:'product', itemId:batch.productId, itemName:batch.productName,
-    qty:batch.qty, direction:'in', reason:'PRODUCTION', reference:batch.batchNo, notes:''
+    qty:actual, direction:'in', reason:'PRODUCTION', reference:batch.batchNo, notes:''
   });
-  await db.doc('production_batches/'+batch.id).update({status:'RELEASED', releasedDate:todayStr()});
-  logActivity(`Batch ${batch.batchNo} released: +${batch.qty} ${batch.productName} into inventory`);
+  await db.doc('production_batches/'+batch.id).update({
+    status:'RELEASED', releasedDate:todayStr(), actualQty:actual, wasteQty, yieldPct, releaseNotes:releaseNotes||''
+  });
+  logActivity(`Batch ${batch.batchNo} released: +${actual} ${batch.productName} into inventory (${yieldPct.toFixed(0)}% yield${wasteQty>0?`, ${wasteQty} lost`:''})`);
+}
+let releasingBatchId = null;
+function openReleaseBatchModal(id){
+  if(blockIfNoEdit('production')) return;
+  const batch = productionBatchesList.find(b=>b.id===id);
+  if(!batch || batch.status==='RELEASED') return;
+  releasingBatchId = id;
+  const box = document.getElementById('releaseBatchModalBox');
+  box.innerHTML = `
+    <h3>Release batch ${batch.batchNo}</h3>
+    <div class="order-summary" style="margin:10px 0;">
+      <div><span>${batch.productName}</span><span>planned ${batch.qty}</span></div>
+    </div>
+    <div class="field"><label>Actual quantity produced</label>
+      <input type="number" id="releaseActualQty" min="0" value="${batch.qty}">
+    </div>
+    <div class="field"><label>Notes (optional)</label>
+      <input type="text" id="releaseNotesInput" placeholder="e.g. 3 jugs cracked during bottling">
+    </div>
+    <div class="sm" style="margin:8px 0 2px;color:rgba(255,243,214,.6);">This adds the actual quantity to finished-goods inventory. Components are deducted for the full planned batch either way — that's what the attempt used up.</div>
+    <button class="btn" style="width:100%;margin-top:12px;" onclick="confirmReleaseBatch()">Release batch</button>
+    <button class="btn ghost" style="width:100%;margin-top:8px;" onclick="closeReleaseBatchModal()">Cancel</button>
+  `;
+  document.getElementById('releaseBatchModal').classList.add('open');
+  setTimeout(()=>{ const inp = document.getElementById('releaseActualQty'); if(inp) inp.focus(); }, 0);
+}
+function closeReleaseBatchModal(){
+  releasingBatchId = null;
+  document.getElementById('releaseBatchModal').classList.remove('open');
+}
+async function confirmReleaseBatch(){
+  const id = releasingBatchId;
+  const batch = productionBatchesList.find(b=>b.id===id);
+  if(!id || !batch) return;
+  const actualQty = Math.max(0, parseFloat(document.getElementById('releaseActualQty').value)||0);
+  const releaseNotes = (document.getElementById('releaseNotesInput').value||'').trim();
+  const btn = document.querySelector('#releaseBatchModalBox .btn:not(.ghost)');
+  if(btn) btn.disabled = true;
+  try{
+    await releaseBatch(batch, actualQty, releaseNotes);
+    closeReleaseBatchModal();
+  } catch(e){
+    console.error('confirmReleaseBatch failed', e);
+    toast(friendlyError(e));
+  } finally { if(btn) btn.disabled = false; }
 }
 async function advanceBatch(id){
   if(blockIfNoEdit('production')) return;
@@ -2253,7 +2388,7 @@ async function advanceBatch(id){
   if(!next) return;
   if(next==='RELEASED'){
     if(batch.status==='RELEASED') return; // never double-release
-    await releaseBatch(batch);
+    openReleaseBatchModal(id);
   } else {
     await db.doc('production_batches/'+id).update({status:next});
   }
@@ -2269,15 +2404,19 @@ function renderProduction(){
   if(!body) return;
   updateBatchNoPreview();
   document.getElementById('batchCount').textContent = productionBatchesList.length + ' on file';
-  if(productionBatchesList.length===0){ body.innerHTML = '<tr><td colspan="5"><div class="empty">No production batches yet.</div></td></tr>'; return; }
+  if(productionBatchesList.length===0){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No production batches yet.</div></td></tr>'; return; }
   body.innerHTML = productionBatchesList.map(b=>{
     const next = BATCH_NEXT_STATUS[b.status];
     const canCancel = b.status!=='RELEASED' && b.status!=='CANCELLED';
+    const yieldCell = b.status==='RELEASED' && b.actualQty!=null
+      ? `<span title="${b.releaseNotes?b.releaseNotes.replace(/"/g,'&quot;'):''}" style="color:${b.yieldPct>=95?'var(--lime)':b.yieldPct>=80?'var(--orange)':'var(--pink)'};">${b.actualQty}/${b.qty} (${b.yieldPct.toFixed(0)}%)</span>`
+      : '—';
     return `
       <tr>
         <td class="mono">${b.batchNo}</td>
         <td>${b.productName}</td>
         <td class="mono">${b.qty}</td>
+        <td class="mono">${yieldCell}</td>
         <td><span class="pill ${BATCH_PILL[b.status]||'low'}">${b.status.toLowerCase()}</span></td>
         <td>
           ${next?`<button class="btn ghost" onclick="advanceBatch('${b.id}')">${next==='RELEASED'?'release':'mark '+next.toLowerCase()}</button>`:''}
@@ -2955,6 +3094,7 @@ async function startApp(){
     suppliersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderSuppliers();
     refreshPoDropdowns();
+    renderComponents();
   }, err=>console.error('suppliers', err));
 
   db.collection('customers').orderBy('ts','desc').onSnapshot(snap=>{
@@ -2992,6 +3132,7 @@ async function startApp(){
   db.collection('inventory_movements').orderBy('ts','desc').limit(200).onSnapshot(snap=>{
     movementsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderMovements();
+    renderReorderSuggestions();
   }, err=>console.error('inventory_movements', err));
 
   db.collection('expenses').orderBy('ts','desc').onSnapshot(snap=>{
