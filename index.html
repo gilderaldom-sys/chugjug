@@ -894,6 +894,34 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       </table>
       </div>
     </div>
+    <div class="panel">
+      <h2>Spending by category <span class="sm">this month, budget vs. actual where you've set one</span></h2>
+      <div id="budgetForm" class="form-row" style="margin-bottom:14px;">
+        <div class="field"><label>Category</label><select id="budgetCategory"></select></div>
+        <div class="field"><label>Monthly budget (₱)</label><input type="number" id="budgetAmount" min="0" value="0"></div>
+        <button class="btn" id="saveBudgetBtn" onclick="saveExpenseBudget()">Save budget</button>
+      </div>
+      <div id="categoryBreakdown"></div>
+    </div>
+    <div class="panel">
+      <h2>Recurring expenses <span class="sm">auto-logged once a month, the first time the dashboard is opened that month</span></h2>
+      <div class="form-row">
+        <div class="field"><label>Category</label><select id="recCategory"></select></div>
+        <div class="field"><label>Amount (₱)</label><input type="number" id="recAmount" min="0" value="0"></div>
+        <div class="field"><label>Payment method</label>
+          <select id="recPayMethod"><option>Cash</option><option>GCash</option><option>Bank Transfer</option><option>Maya</option><option>COD</option><option>Other</option></select>
+        </div>
+        <div class="field"><label>Day of month</label><input type="number" id="recDayOfMonth" min="1" max="28" value="1"></div>
+        <div class="field"><label>Notes</label><input type="text" id="recNotes" placeholder="e.g. shop rent"></div>
+        <button class="btn" id="addRecurringBtn" onclick="addRecurringExpense()">Add recurring</button>
+      </div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>Category</th><th>Amount</th><th>Day</th><th>Last logged</th><th>Status</th><th></th></tr></thead>
+        <tbody id="recurringBody"></tbody>
+      </table>
+      </div>
+    </div>
   </section>
 
   <section class="view" id="v-customers">
@@ -1003,6 +1031,7 @@ const FLAVORS = [
   {id:'grape', name:'Grape Escape', price:899},
 ];
 const FLAVOR_THEME = { blue:'#2DE2FF', straw:'#FF3F81', mango:'#FFB23D', apple:'#B8E02F', grape:'#9B5DE5' };
+const EXPENSE_CATEGORIES = ['Marketing','Delivery','Labor','Utilities','Packaging','Platform fees','Transportation','Supplies','Miscellaneous'];
 
 // Starter components + recipe quantities for the five official kits. These
 // are placeholder starting points — every cost and quantity is editable in
@@ -1427,7 +1456,9 @@ let productsList = [];    // {id, name, category, colorTheme, sellingPrice, desc
 let componentsList = [];  // {id, name, category, unit, stock, lowThreshold, costPerUnit, ts}
 let recipeItemsList = []; // {id, productId, componentId, qtyPerUnit}
 let movementsList = [];   // {id, ts, itemType, itemId, itemName, qty, direction, reason, reference, notes}
-let expensesList = [];    // {id, date, category, amount, paymentMethod, notes, ts}
+let expensesList = [];    // {id, date, category, amount, paymentMethod, notes, ts, source, recurringExpenseId}
+let expenseBudgetsList = []; // {id, category, monthlyBudget, ts}
+let recurringExpensesList = []; // {id, category, amount, paymentMethod, notes, dayOfMonth, active, lastRunMonth, ts}
 let purchaseOrdersList = []; // {id, poNo, supplierId, supplierName, status, items:[{componentId,componentName,qty,unitCost}], totalCost, orderedDate, receivedDate, notes, ts}
 let poDraftItems = [];    // in-memory, not persisted until the PO is created
 let cashSettings = { openingCash: 0 };
@@ -1611,7 +1642,7 @@ function renderExpenses(){
   const body = document.getElementById('expBody');
   if(!body) return;
   document.getElementById('expCount').textContent = expensesList.length + ' logged';
-  if(expensesList.length===0){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No expenses logged yet.</div></td></tr>'; return; }
+  if(expensesList.length===0){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No expenses logged yet.</div></td></tr>'; renderCategoryBreakdown(); return; }
   body.innerHTML = expensesList.map(e=>`
     <tr>
       <td class="mono">${e.date}</td>
@@ -1621,6 +1652,126 @@ function renderExpenses(){
       <td>${e.notes||'—'}</td>
       <td><button class="btn ghost" onclick="deleteExpense('${e.id}')">delete</button></td>
     </tr>`).join('');
+  renderCategoryBreakdown();
+}
+
+// --- Expense budgets (monthly, per category) --------------------------------
+async function saveExpenseBudget(){
+  if(blockIfNoEdit('finance')) return;
+  const category = document.getElementById('budgetCategory').value;
+  const monthlyBudget = Math.max(0, parseFloat(document.getElementById('budgetAmount').value)||0);
+  const btn = document.getElementById('saveBudgetBtn');
+  btn.disabled = true;
+  try{
+    const existing = expenseBudgetsList.find(b=>b.category===category);
+    if(existing) await db.doc('expense_budgets/'+existing.id).update({monthlyBudget});
+    else await db.collection('expense_budgets').add({category, monthlyBudget, ts:Date.now()});
+    toast(`Budget for ${category} saved.`, 'ok');
+  } catch(e){
+    console.error('saveExpenseBudget failed', e);
+    toast(friendlyError(e));
+  } finally { btn.disabled = false; }
+}
+function renderCategoryBreakdown(){
+  const el = document.getElementById('categoryBreakdown');
+  if(!el) return;
+  const month = monthStr();
+  const monthExpenses = expensesList.filter(e=>e.date && e.date.startsWith(month));
+  const totals = {};
+  monthExpenses.forEach(e=>{ totals[e.category] = (totals[e.category]||0) + (e.amount||0); });
+  const budgeted = new Set(expenseBudgetsList.filter(b=>b.monthlyBudget>0).map(b=>b.category));
+  const categories = EXPENSE_CATEGORIES.filter(c=>(totals[c]||0)>0 || budgeted.has(c));
+  if(!categories.length){ el.innerHTML = '<div class="empty">No expenses logged this month yet.</div>'; return; }
+  const grandTotal = Object.values(totals).reduce((a,b)=>a+b,0);
+  el.innerHTML = categories.map(cat=>{
+    const actual = totals[cat]||0;
+    const budget = (expenseBudgetsList.find(b=>b.category===cat)||{}).monthlyBudget || 0;
+    const pctOfTotal = grandTotal>0 ? (actual/grandTotal*100) : 0;
+    const hasBudget = budget>0;
+    const pctOfBudget = hasBudget ? (actual/budget*100) : 0;
+    const over = hasBudget && actual>budget;
+    const barWidth = Math.min(100, hasBudget ? pctOfBudget : pctOfTotal);
+    return `<div style="margin-bottom:14px;">
+      <div class="bar-row"><span>${cat}${hasBudget?` — budget ${fmtPeso(budget)}`:''}</span><span>${fmtPeso(actual)} (${pctOfTotal.toFixed(0)}% of spend)</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${barWidth}%;${over?'background:var(--pink);':''}"></div></div>
+      ${hasBudget?`<div class="sm" style="color:${over?'var(--pink)':'rgba(255,243,214,.5)'};margin-top:2px;">${pctOfBudget.toFixed(0)}% of budget${over?' — over budget':''}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// --- Recurring expenses ------------------------------------------------------
+// Auto-logs each active recurring expense once per calendar month, the first
+// time someone with Finance-edit access opens the dashboard that month.
+// There's no server-side cron here — this is a client-triggered "catch up"
+// check, which is why it runs off lastRunMonth rather than the exact day.
+let recurringRunInFlight = new Set();
+async function addRecurringExpense(){
+  if(blockIfNoEdit('finance')) return;
+  const category = document.getElementById('recCategory').value;
+  const amount = Math.max(0, parseFloat(document.getElementById('recAmount').value)||0);
+  const paymentMethod = document.getElementById('recPayMethod').value;
+  const dayOfMonth = Math.min(28, Math.max(1, parseInt(document.getElementById('recDayOfMonth').value)||1));
+  const notes = document.getElementById('recNotes').value.trim();
+  if(amount<=0){ toast('Enter an amount greater than zero.'); return; }
+  const btn = document.getElementById('addRecurringBtn');
+  btn.disabled = true;
+  try{
+    await db.collection('recurring_expenses').add({category, amount, paymentMethod, dayOfMonth, notes, active:true, lastRunMonth:null, ts:Date.now()});
+    document.getElementById('recAmount').value = 0;
+    document.getElementById('recNotes').value = '';
+    toast('Recurring expense added.', 'ok');
+    logActivity(`Recurring expense set up: ${category} ${fmtPeso(amount)}/mo`);
+  } catch(e){
+    console.error('addRecurringExpense failed', e);
+    toast(friendlyError(e));
+  } finally { btn.disabled = false; }
+}
+async function toggleRecurringActive(id, active){
+  if(blockIfNoEdit('finance')) return;
+  await db.doc('recurring_expenses/'+id).update({active});
+}
+async function deleteRecurringExpense(id){
+  if(blockIfNoEdit('finance')) return;
+  await db.doc('recurring_expenses/'+id).delete();
+}
+function renderRecurringExpenses(){
+  const body = document.getElementById('recurringBody');
+  if(!body) return;
+  if(!recurringExpensesList.length){ body.innerHTML = '<tr><td colspan="6"><div class="empty">No recurring expenses set up yet.</div></td></tr>'; return; }
+  body.innerHTML = recurringExpensesList.map(r=>`
+    <tr>
+      <td>${r.category}</td>
+      <td class="mono">${fmtPeso(r.amount||0)}</td>
+      <td class="mono">${r.dayOfMonth||1}</td>
+      <td class="mono sm">${r.lastRunMonth||'never'}</td>
+      <td><span class="pill ${r.active?'ok':'low'}">${r.active?'active':'paused'}</span></td>
+      <td>
+        <button class="btn ghost" onclick="toggleRecurringActive('${r.id}', ${!r.active})">${r.active?'pause':'resume'}</button>
+        <button class="btn ghost" onclick="deleteRecurringExpense('${r.id}')">delete</button>
+      </td>
+    </tr>`).join('');
+}
+async function runDueRecurringExpenses(){
+  if(!canEdit('finance')) return;
+  const month = monthStr();
+  for(const r of recurringExpensesList){
+    if(!r.active) continue;
+    if(r.lastRunMonth===month) continue;
+    if(recurringRunInFlight.has(r.id)) continue;
+    recurringRunInFlight.add(r.id);
+    try{
+      await db.collection('expenses').add({
+        date: todayStr(), category:r.category, amount:r.amount||0, paymentMethod:r.paymentMethod||'Cash',
+        notes:(r.notes?r.notes+' — ':'')+'auto-logged recurring expense', ts:Date.now(),
+        source:'recurring', recurringExpenseId:r.id
+      });
+      await db.doc('recurring_expenses/'+r.id).update({lastRunMonth:month});
+      r.lastRunMonth = month;
+      logActivity(`Recurring expense auto-logged: ${r.category} ${fmtPeso(r.amount||0)}`);
+    } catch(e){
+      console.error('runDueRecurringExpenses failed for', r.id, e);
+    } finally { recurringRunInFlight.delete(r.id); }
+  }
 }
 
 // --- Purchase orders (supplier purchasing) ----------------------------------
@@ -2518,6 +2669,13 @@ document.getElementById('expDate').value = todayStr();
 document.getElementById('poDate').value = todayStr();
 document.getElementById('ovMonthLabel').textContent = monthStr();
 document.getElementById('tgMonthLabel').textContent = monthStr();
+(function populateExpenseCategoryDropdowns(){
+  const opts = EXPENSE_CATEGORIES.map(c=>`<option>${c}</option>`).join('');
+  const budgetSel = document.getElementById('budgetCategory');
+  const recSel = document.getElementById('recCategory');
+  if(budgetSel) budgetSel.innerHTML = opts;
+  if(recSel) recSel.innerHTML = opts;
+})();
 
 // overview date filter: Month / Year / Custom range
 let ovFilter = { mode:'month', month: monthStr(), year: new Date().getFullYear(), from: todayStr(), to: todayStr() };
@@ -2841,6 +2999,17 @@ async function startApp(){
     renderExpenses();
     renderFinance();
   }, err=>console.error('expenses', err));
+
+  db.collection('expense_budgets').onSnapshot(snap=>{
+    expenseBudgetsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderCategoryBreakdown();
+  }, err=>console.error('expense_budgets', err));
+
+  db.collection('recurring_expenses').onSnapshot(snap=>{
+    recurringExpensesList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderRecurringExpenses();
+    runDueRecurringExpenses();
+  }, err=>console.error('recurring_expenses', err));
 
   db.collection('purchase_orders').orderBy('ts','desc').onSnapshot(snap=>{
     purchaseOrdersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
