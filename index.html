@@ -3526,6 +3526,7 @@ function renderOnlineOrders(){
         <div class="wo-pay">
           <span>${o.paymentMethod||'GCash/Maya QR'}</span>
           <span class="paypill ${payPillClass}">${payStatus}</span>
+          ${o.paymentProofPath ? `<button class="btn ghost" data-readonly-ok="1" onclick="viewPaymentProof('${o.paymentProofPath}')">view proof</button>` : ''}
         </div>
         <div class="wo-actions">
           <button class="btn" onclick="confirmOnlineOrder('${o.id}')">Confirm → create sale</button>
@@ -3615,6 +3616,19 @@ async function declineOnlineOrder(id){
   } catch(e){
     console.error('declineOnlineOrder failed', e);
     toast(friendlyError(e));
+  }
+}
+
+// The payment-proofs bucket is private, so a stored path isn't directly
+// browsable — generate a short-lived signed URL and open it in a new tab.
+async function viewPaymentProof(path){
+  try{
+    const { data, error } = await sbClient.storage.from('payment-proofs').createSignedUrl(path, 3600);
+    if(error) throw error;
+    window.open(data.signedUrl, '_blank', 'noopener');
+  } catch(e){
+    console.error('viewPaymentProof failed', e);
+    toast("Couldn't load the payment screenshot.");
   }
 }
 
