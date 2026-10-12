@@ -591,6 +591,10 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <div id="reorderSuggestions"></div>
     </div>
     <div class="panel">
+      <h2>Notify-me requests <span class="sm" id="notifyReqCount">customers waiting on sold-out flavors</span></h2>
+      <div id="notifyRequestsList"></div>
+    </div>
+    <div class="panel">
       <h2>Recent stock movements <span class="sm">most recent first</span></h2>
       <div class="table-scroll">
       <table>
@@ -1506,6 +1510,7 @@ let expensesList = [];    // {id, date, category, amount, paymentMethod, notes, 
 let expenseBudgetsList = []; // {id, category, monthlyBudget, ts}
 let recurringExpensesList = []; // {id, category, amount, paymentMethod, notes, dayOfMonth, active, lastRunMonth, ts}
 let promoCodesList = []; // {id, code, discountType, discountValue, active, maxUses, usedCount, expiresAt, ts}
+let notifyRequestsList = []; // {id, flavorId, flavorName, contact, contactType, notified, ts}
 let purchaseOrdersList = []; // {id, poNo, supplierId, supplierName, status, items:[{componentId,componentName,qty,unitCost}], totalCost, orderedDate, receivedDate, notes, ts}
 let poDraftItems = [];    // in-memory, not persisted until the PO is created
 let cashSettings = { openingCash: 0 };
@@ -1955,6 +1960,45 @@ function renderPromoCodes(){
         </td>
       </tr>`;
   }).join('');
+}
+
+// Groups pending "notify me when back in stock" requests by flavor so
+// staff can see demand at a glance and reach out (wa.me for a phone number,
+// mailto for an email) once a flavor is restocked.
+function renderNotifyRequests(){
+  const box = document.getElementById('notifyRequestsList');
+  const countEl = document.getElementById('notifyReqCount');
+  if(!box) return;
+  const pending = notifyRequestsList.filter(r=>!r.notified);
+  if(countEl) countEl.textContent = pending.length ? `${pending.length} waiting on sold-out flavors` : 'customers waiting on sold-out flavors';
+  if(!pending.length){ box.innerHTML = '<div class="empty">No pending notify-me requests.</div>'; return; }
+  const byFlavor = {};
+  pending.forEach(r=>{
+    const key = r.flavorName || r.flavorId;
+    if(!byFlavor[key]) byFlavor[key] = [];
+    byFlavor[key].push(r);
+  });
+  box.innerHTML = Object.entries(byFlavor).map(([flavorName, reqs])=>`
+    <div style="margin-bottom:14px;">
+      <div style="font-weight:800;margin-bottom:6px;">${flavorName} <span class="sm">· ${reqs.length} waiting</span></div>
+      <div class="order-summary">
+        ${reqs.map(r=>`
+          <div>
+            <span>${r.contactType==='email' ? `<a href="mailto:${r.contact}" style="color:var(--cyan);">${r.contact}</a>` : `<a href="${waLink(r.contact)}" target="_blank" rel="noopener" style="color:var(--cyan);">${r.contact}</a>`} <span class="sm">· ${timeAgo(r.ts)}</span></span>
+            <button class="btn ghost" onclick="markNotifyRequestDone('${r.id}')">mark notified</button>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+async function markNotifyRequestDone(id){
+  if(blockIfNoEdit('inventory')) return;
+  try{
+    await db.doc('stock_notify_requests/'+id).update({notified:true});
+    toast('Marked as notified.', 'ok');
+  } catch(e){
+    console.error('markNotifyRequestDone failed', e);
+    toast(friendlyError(e));
+  }
 }
 
 // --- Purchase orders (supplier purchasing) ----------------------------------
@@ -3259,6 +3303,11 @@ async function startApp(){
     promoCodesList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderPromoCodes();
   }, err=>console.error('promo_codes', err));
+
+  db.collection('stock_notify_requests').orderBy('ts','desc').onSnapshot(snap=>{
+    notifyRequestsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderNotifyRequests();
+  }, err=>console.error('stock_notify_requests', err));
 
   db.collection('purchase_orders').orderBy('ts','desc').onSnapshot(snap=>{
     purchaseOrdersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
