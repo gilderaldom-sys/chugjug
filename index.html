@@ -963,15 +963,17 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
         <div class="field"><label>Type</label>
           <select id="custType"><option value="retail">Retail</option><option value="reseller">Reseller</option><option value="events">Events / Bulk</option></select>
         </div>
+        <div class="field"><label>Birthday (optional)</label><input type="date" id="custBirthday"></div>
+        <div class="field"><label>Notes (optional)</label><input type="text" id="custNotes" placeholder="allergies, preferences, etc."></div>
         <button class="btn" id="addCustomerBtn" onclick="addCustomer()">Add</button>
       </div>
     </div>
     <div class="panel">
       <h2>Customer directory <span class="sm" id="custCount"></span></h2>
-      <div class="sub" style="margin:-4px 0 12px;">Orders, spend and status are calculated automatically from order history — not entered by hand.</div>
+      <div class="sub" style="margin:-4px 0 12px;">Orders, spend and status are calculated automatically from order history — not entered by hand. Birthday and notes are editable inline.</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Customer</th><th>Phone</th><th>Email</th><th>Location</th><th>Type</th><th>Orders</th><th>Total spent</th><th>Favorite</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Customer</th><th>Phone</th><th>Email</th><th>Location</th><th>Type</th><th>Orders</th><th>Total spent</th><th>Favorite</th><th>Status</th><th>Birthday</th><th>Notes</th><th></th></tr></thead>
         <tbody id="custBody"></tbody>
       </table>
       </div>
@@ -979,6 +981,23 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     <div class="panel">
       <h2>Top customers <span class="sm">ranked by lifetime spend</span></h2>
       <div id="topCustomers"></div>
+    </div>
+    <div class="panel">
+      <h2>Win-back list <span class="sm">customers with no order in 90+ days</span></h2>
+      <div id="winbackList"></div>
+    </div>
+    <div class="panel">
+      <h2>Loyalty program <span class="sm">reward repeat customers automatically</span></h2>
+      <div class="target-form">
+        <div class="field"><label>Every N paid orders</label><input type="number" id="loyaltyEveryN" min="2" value="5"></div>
+        <div class="field"><label>Reward value (₱)</label><input type="number" id="loyaltyRewardValue" min="0" value="899"></div>
+        <button class="btn" id="saveLoyaltyBtn" onclick="saveLoyaltySettings()">Save</button>
+      </div>
+      <div id="loyaltyRewardsList"></div>
+    </div>
+    <div class="panel">
+      <h2>Upcoming birthdays <span class="sm">next 30 days</span></h2>
+      <div id="upcomingBirthdays"></div>
     </div>
   </section>
 
@@ -3251,7 +3270,12 @@ async function startApp(){
   db.doc('settings/finance').onSnapshot(snap=>{
     if(snap.exists){ cashSettings = snap.data(); }
     document.getElementById('cashOpening').value = cashSettings.openingCash || '';
+    const loyaltyEveryNEl = document.getElementById('loyaltyEveryN');
+    const loyaltyRewardValueEl = document.getElementById('loyaltyRewardValue');
+    if(loyaltyEveryNEl) loyaltyEveryNEl.value = cashSettings.loyaltyEveryN || 5;
+    if(loyaltyRewardValueEl) loyaltyRewardValueEl.value = cashSettings.loyaltyRewardValue!=null ? cashSettings.loyaltyRewardValue : 899;
     renderFinance();
+    renderCustomers();
   }, err=>console.error('finance settings', err));
 
   db.collection('production_batches').orderBy('ts','desc').onSnapshot(snap=>{
@@ -4421,15 +4445,19 @@ async function addCustomer(){
   const location = document.getElementById('custLocation').value;
   const locationName = location ? HUBS.find(h=>h.id===location).name : 'Unspecified';
   const type = document.getElementById('custType').value;
+  const birthday = document.getElementById('custBirthday').value || null;
+  const notes = document.getElementById('custNotes').value.trim();
   const btn = document.getElementById('addCustomerBtn');
   btn.disabled = true;
   try{
-    await db.collection('customers').add({name, phone, email, location, locationName, type, ts:Date.now()});
+    await db.collection('customers').add({name, phone, email, location, locationName, type, birthday, notes, ts:Date.now()});
     document.getElementById('custName').value = '';
     document.getElementById('custPhone').value = '';
     document.getElementById('custEmail').value = '';
     document.getElementById('custLocation').value = '';
     document.getElementById('custType').value = 'retail';
+    document.getElementById('custBirthday').value = '';
+    document.getElementById('custNotes').value = '';
     logActivity(`Customer added: ${name}`);
     toast(`Customer added: ${name}.`, 'ok');
   } catch(e){
@@ -4440,6 +4468,65 @@ async function addCustomer(){
 async function deleteCustomer(id){
   if(blockIfNoEdit('customers')) return;
   await db.doc('customers/'+id).delete();
+}
+async function updateCustomerBirthday(id, val){
+  if(blockIfNoEdit('customers')) return;
+  await db.doc('customers/'+id).update({birthday: val||null});
+}
+async function updateCustomerNotes(id, val){
+  if(blockIfNoEdit('customers')) return;
+  await db.doc('customers/'+id).update({notes: val.trim()});
+}
+async function markCustomerContacted(id){
+  if(blockIfNoEdit('customers')) return;
+  await db.doc('customers/'+id).update({lastContactedAt: Date.now()});
+  toast('Marked as contacted.', 'ok');
+}
+// Phone numbers on file are typically local PH format (09XX XXX XXXX);
+// wa.me needs the international form without the leading 0.
+function waLink(phone){
+  const digits = (phone||'').replace(/\D/g,'');
+  const intl = digits.startsWith('0') ? '63'+digits.slice(1) : digits;
+  return 'https://wa.me/'+intl;
+}
+// Generates a one-time promo code for a specific customer reward (loyalty
+// milestone or birthday treat) by reusing the existing promo_codes table —
+// the owner hands/texts the code to the customer to redeem at checkout.
+async function generateRewardCode(prefix, value){
+  const code = prefix+'-'+Math.random().toString(36).slice(2,7).toUpperCase();
+  await db.collection('promo_codes').add({
+    code, discountType:'fixed', discountValue:value, active:true, maxUses:1, usedCount:0, expiresAt:null, ts:Date.now()
+  });
+  return code;
+}
+async function redeemLoyaltyReward(customerId, orderCount){
+  if(blockIfNoEdit('customers')) return;
+  try{
+    const rewardValue = cashSettings.loyaltyRewardValue!=null ? cashSettings.loyaltyRewardValue : 899;
+    const code = await generateRewardCode('LOYALTY', rewardValue);
+    await db.doc('customers/'+customerId).update({loyaltyRedeemedCount: orderCount});
+    const c = customersList.find(x=>x.id===customerId);
+    if(c) c.loyaltyRedeemedCount = orderCount;
+    logActivity(`Loyalty reward generated for ${c?c.name:customerId}: code ${code}`);
+    toast(`Reward code ${code} generated — share it with the customer.`, 'ok');
+    renderCustomers();
+  } catch(e){
+    console.error('redeemLoyaltyReward failed', e);
+    toast(friendlyError(e));
+  }
+}
+async function sendBirthdayTreat(customerId){
+  if(blockIfNoEdit('customers')) return;
+  try{
+    const rewardValue = cashSettings.loyaltyRewardValue!=null ? cashSettings.loyaltyRewardValue : 899;
+    const code = await generateRewardCode('BDAY', rewardValue);
+    const c = customersList.find(x=>x.id===customerId);
+    logActivity(`Birthday treat generated for ${c?c.name:customerId}: code ${code}`);
+    toast(`Birthday code ${code} generated — share it with the customer.`, 'ok');
+  } catch(e){
+    console.error('sendBirthdayTreat failed', e);
+    toast(friendlyError(e));
+  }
 }
 
 // Classifies a customer from their real order history rather than a manual
@@ -4466,7 +4553,7 @@ function computeCustomerStats(){
     const lastOrder = orders.slice().sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
     const status = classifyCustomer(orderCount, totalSpent, lastOrder&&lastOrder.date);
     const avgOrderValue = orderCount ? totalSpent/orderCount : 0;
-    return { c, orderCount, totalSpent, avgOrderValue, favorite: favorite?favorite[0]:'—', status };
+    return { c, orderCount, totalSpent, avgOrderValue, favorite: favorite?favorite[0]:'—', status, lastOrderDate: lastOrder&&lastOrder.date||null };
   });
 }
 
@@ -4476,7 +4563,7 @@ function renderCustomers(){
 
   const stats = computeCustomerStats();
 
-  if(customersList.length===0){ body.innerHTML = '<tr><td colspan="10"><div class="empty">No customers added yet.</div></td></tr>'; }
+  if(customersList.length===0){ body.innerHTML = '<tr><td colspan="12"><div class="empty">No customers added yet.</div></td></tr>'; }
   else {
     body.innerHTML = stats.map(({c, orderCount, totalSpent, favorite, status})=>`
       <tr>
@@ -4489,6 +4576,8 @@ function renderCustomers(){
         <td class="mono">${fmtPeso(totalSpent)}</td>
         <td>${favorite}</td>
         <td><span class="pill ${CUST_PILL[status]||'ok'}">${status.toLowerCase()}</span></td>
+        <td><input type="date" value="${c.birthday||''}" onchange="updateCustomerBirthday('${c.id}', this.value)" style="width:140px;"></td>
+        <td><input type="text" value="${(c.notes||'').replace(/"/g,'&quot;')}" placeholder="—" onchange="updateCustomerNotes('${c.id}', this.value)" style="width:140px;"></td>
         <td><button class="btn ghost" onclick="deleteCustomer('${c.id}')">delete</button></td>
       </tr>`).join('');
   }
@@ -4501,6 +4590,9 @@ function renderCustomers(){
     <div class="card"><div class="label">tracked orders</div><div class="value">${totalOrders}</div><div class="sub">across all customers</div></div>
   `;
   renderTopCustomers(stats);
+  renderWinbackList(stats);
+  renderLoyaltyRewards(stats);
+  renderUpcomingBirthdays();
 }
 
 // Customer analytics: who's actually buying, ranked by lifetime spend —
@@ -4518,6 +4610,93 @@ function renderTopCustomers(stats){
     <div class="order-summary">
       ${top.map(s=>`<div><span>${s.c.name} <span class="sm">· ${s.orderCount} order${s.orderCount===1?'':'s'}</span></span><span>${fmtPeso(s.totalSpent)}</span></div>`).join('')}
     </div>`;
+}
+
+// Win-back list: customers whose status has slipped to DORMANT (no order in
+// 90+ days), most-overdue first, with a one-tap wa.me link and a way to log
+// that they were reached out to.
+function renderWinbackList(stats){
+  const box = document.getElementById('winbackList');
+  if(!box) return;
+  stats = stats || computeCustomerStats();
+  const dormant = stats.filter(s=>s.status==='DORMANT' && s.lastOrderDate)
+    .map(s=>({...s, daysSince: Math.round((Date.now()-new Date(s.lastOrderDate).getTime())/86400000)}))
+    .sort((a,b)=>b.daysSince-a.daysSince);
+  if(dormant.length===0){ box.innerHTML = '<div class="empty">No dormant customers right now.</div>'; return; }
+  box.innerHTML = `
+    <div class="order-summary">
+      ${dormant.map(s=>`
+        <div>
+          <span>${s.c.name} <span class="sm">· ${s.daysSince}d since last order · last contacted ${s.c.lastContactedAt?timeAgo(s.c.lastContactedAt):'never'}</span></span>
+          <span style="display:flex;gap:6px;align-items:center;">
+            ${s.c.phone?`<a class="btn ghost" href="${waLink(s.c.phone)}" target="_blank" rel="noopener">message</a>`:''}
+            <button class="btn ghost" onclick="markCustomerContacted('${s.c.id}')">mark contacted</button>
+          </span>
+        </div>`).join('')}
+    </div>`;
+}
+
+// Loyalty program: flags customers who've crossed the "every N paid orders"
+// threshold since their last reward and haven't been rewarded for it yet.
+function renderLoyaltyRewards(stats){
+  const box = document.getElementById('loyaltyRewardsList');
+  if(!box) return;
+  stats = stats || computeCustomerStats();
+  const everyN = cashSettings.loyaltyEveryN || 5;
+  const eligible = stats.filter(s=>{
+    if(!s.orderCount) return false;
+    const sinceReward = s.orderCount - (s.c.loyaltyRedeemedCount||0);
+    return sinceReward >= everyN;
+  }).sort((a,b)=>b.orderCount-a.orderCount);
+  if(eligible.length===0){ box.innerHTML = '<div class="empty">No customers have hit the loyalty threshold yet.</div>'; return; }
+  box.innerHTML = `
+    <div class="order-summary">
+      ${eligible.map(s=>`
+        <div>
+          <span>${s.c.name} <span class="sm">· ${s.orderCount} orders total</span></span>
+          <button class="btn" onclick="redeemLoyaltyReward('${s.c.id}', ${s.orderCount})">Redeem reward</button>
+        </div>`).join('')}
+    </div>`;
+}
+
+// Upcoming birthdays: customers whose birthday (month/day) falls within the
+// next 30 days, soonest first.
+function renderUpcomingBirthdays(){
+  const box = document.getElementById('upcomingBirthdays');
+  if(!box) return;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const withBdays = customersList.filter(c=>c.birthday).map(c=>{
+    const bday = new Date(c.birthday+'T00:00:00');
+    let next = new Date(today.getFullYear(), bday.getMonth(), bday.getDate());
+    if(next < today) next = new Date(today.getFullYear()+1, bday.getMonth(), bday.getDate());
+    const daysUntil = Math.round((next-today)/86400000);
+    return { c, daysUntil };
+  }).filter(x=>x.daysUntil<=30).sort((a,b)=>a.daysUntil-b.daysUntil);
+  if(withBdays.length===0){ box.innerHTML = '<div class="empty">No birthdays in the next 30 days.</div>'; return; }
+  box.innerHTML = `
+    <div class="order-summary">
+      ${withBdays.map(({c, daysUntil})=>`
+        <div>
+          <span>${c.name} <span class="sm">· ${daysUntil===0?'today':daysUntil===1?'tomorrow':'in '+daysUntil+'d'}</span></span>
+          <button class="btn ghost" onclick="sendBirthdayTreat('${c.id}')">send birthday treat</button>
+        </div>`).join('')}
+    </div>`;
+}
+
+async function saveLoyaltySettings(){
+  if(blockIfNoEdit('finance')) return;
+  const loyaltyEveryN = Math.max(2, parseInt(document.getElementById('loyaltyEveryN').value)||5);
+  const loyaltyRewardValue = Math.max(0, parseFloat(document.getElementById('loyaltyRewardValue').value)||0);
+  const btn = document.getElementById('saveLoyaltyBtn');
+  if(btn) btn.disabled = true;
+  try{
+    await db.doc('settings/finance').set({loyaltyEveryN, loyaltyRewardValue});
+    toast('Loyalty settings saved.', 'ok');
+  } catch(e){
+    console.error('saveLoyaltySettings failed', e);
+    toast(friendlyError(e));
+  } finally { if(btn) btn.disabled = !canWrite ? true : false; }
 }
 
 function renderTargets(){
