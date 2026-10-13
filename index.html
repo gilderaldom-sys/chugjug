@@ -595,6 +595,18 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <div id="notifyRequestsList"></div>
     </div>
     <div class="panel">
+      <h2>Party pack deal <span class="sm">auto-applied bundle discount on the storefront</span></h2>
+      <div class="target-form">
+        <div class="field"><label>Jugs per bundle</label><input type="number" id="bundleJugCount" min="2" step="1" value="3"></div>
+        <div class="field"><label>Bundle price (₱)</label><input type="number" id="bundlePrice" min="0" step="1"></div>
+        <div class="field"><label>Deal name</label><input type="text" id="bundleName" placeholder="Party Pack"></div>
+        <div class="field"><label>Description (optional)</label><input type="text" id="bundleDescription" placeholder="Mix any 3 jugs for one flat price."></div>
+        <button class="btn" id="saveBundleBtn" onclick="saveBundleSettings()">Save</button>
+        <button class="btn ghost" id="toggleBundleBtn" onclick="toggleBundleActive()">Activate</button>
+      </div>
+      <div class="sub" style="margin-top:8px;" id="bundleStatusNote">Deal is currently off — customers won't see it.</div>
+    </div>
+    <div class="panel">
       <h2>Recent stock movements <span class="sm">most recent first</span></h2>
       <div class="table-scroll">
       <table>
@@ -2018,6 +2030,46 @@ async function markNotifyRequestDone(id){
   }
 }
 
+// --- Party pack / bundle deal ------------------------------------------------
+// A single configurable "N jugs for a flat price" deal (settings/bundle),
+// same singleton pattern as settings/payment. The storefront applies it
+// automatically to cart pricing whenever bundleActive is true — there's no
+// per-flavor selection here, just the deal's shape and an on/off switch.
+let bundleSettings = { active:false, jugCount:3, price:0, name:'Party Pack', description:'' };
+
+async function saveBundleSettings(){
+  if(blockIfNoEdit('inventory')) return;
+  const jugCount = Math.max(2, parseInt(document.getElementById('bundleJugCount').value)||0);
+  const price = Math.max(0, parseFloat(document.getElementById('bundlePrice').value)||0);
+  const name = document.getElementById('bundleName').value.trim();
+  const description = document.getElementById('bundleDescription').value.trim();
+  const btn = document.getElementById('saveBundleBtn');
+  if(btn) btn.disabled = true;
+  try{
+    await db.doc('settings/bundle').set({
+      bundleJugCount: jugCount, bundlePrice: price,
+      bundleName: name || 'Party Pack', bundleDescription: description || null
+    });
+    toast('Party pack deal saved.', 'ok');
+  } catch(e){
+    console.error('saveBundleSettings failed', e);
+    toast(friendlyError(e));
+  } finally { if(btn) btn.disabled = !canWrite ? true : false; }
+}
+
+async function toggleBundleActive(){
+  if(blockIfNoEdit('inventory')) return;
+  const btn = document.getElementById('toggleBundleBtn');
+  if(btn) btn.disabled = true;
+  try{
+    await db.doc('settings/bundle').set({ bundleActive: !bundleSettings.active });
+    toast(bundleSettings.active ? 'Party pack deal turned off.' : 'Party pack deal is now live on the storefront.', 'ok');
+  } catch(e){
+    console.error('toggleBundleActive failed', e);
+    toast(friendlyError(e));
+  } finally { if(btn) btn.disabled = !canWrite ? true : false; }
+}
+
 // --- Purchase orders (supplier purchasing) ----------------------------------
 function nextPoNo(){
   const year = new Date().getFullYear();
@@ -3382,6 +3434,30 @@ async function startApp(){
     if(mayaNumEl) mayaNumEl.value = d.mayaNumber || '';
     if(mayaNameEl) mayaNameEl.value = d.mayaName || '';
   }, err=>console.error('payment settings', err));
+  db.doc('settings/bundle').onSnapshot(snap=>{
+    const d = snap.exists ? snap.data() : {};
+    bundleSettings = {
+      active: !!d.bundleActive,
+      jugCount: d.bundleJugCount || 3,
+      price: d.bundlePrice || 0,
+      name: d.bundleName || 'Party Pack',
+      description: d.bundleDescription || ''
+    };
+    const jugEl = document.getElementById('bundleJugCount');
+    const priceEl = document.getElementById('bundlePrice');
+    const nameEl = document.getElementById('bundleName');
+    const descEl = document.getElementById('bundleDescription');
+    if(jugEl) jugEl.value = bundleSettings.jugCount;
+    if(priceEl) priceEl.value = bundleSettings.price || '';
+    if(nameEl) nameEl.value = bundleSettings.name;
+    if(descEl) descEl.value = bundleSettings.description;
+    const toggleBtn = document.getElementById('toggleBundleBtn');
+    const statusNote = document.getElementById('bundleStatusNote');
+    if(toggleBtn) toggleBtn.textContent = bundleSettings.active ? 'Turn off' : 'Activate';
+    if(statusNote) statusNote.textContent = bundleSettings.active
+      ? `Live now — any ${bundleSettings.jugCount} jugs for ₱${Number(bundleSettings.price).toLocaleString()} applied automatically at checkout.`
+      : "Deal is currently off — customers won't see it.";
+  }, err=>console.error('bundle settings', err));
 
   db.collection('production_batches').orderBy('ts','desc').onSnapshot(snap=>{
     productionBatchesList = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -3626,6 +3702,7 @@ function renderOnlineOrders(){
           ${o.customerPhone?`Phone: ${o.customerPhone}<br>`:''}
           ${o.customerAddress?`Address: ${o.customerAddress}<br>`:''}
           ${o.promoCode?`Promo: ${o.promoCode} (-${fmtPeso(o.discount||0)})<br>`:''}
+          ${o.bundleDiscount?`Bundle discount: -${fmtPeso(o.bundleDiscount)}<br>`:''}
           ${o.notes?`Notes: ${o.notes}`:''}
         </div>
         <div class="wo-pay">
