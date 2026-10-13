@@ -883,6 +883,17 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <div class="order-summary" id="cashFlowBlock"></div>
     </div>
     <div class="panel">
+      <h2>Payment details <span class="sm">shown to customers at storefront checkout</span></h2>
+      <div class="target-form">
+        <div class="field"><label>GCash number</label><input type="text" id="paymentGcashNumber" placeholder="09XX XXX XXXX"></div>
+        <div class="field"><label>GCash account name</label><input type="text" id="paymentGcashName" placeholder="Juan Dela Cruz"></div>
+        <div class="field"><label>Maya number (optional)</label><input type="text" id="paymentMayaNumber" placeholder="09XX XXX XXXX"></div>
+        <div class="field"><label>Maya account name</label><input type="text" id="paymentMayaName" placeholder="Juan Dela Cruz"></div>
+        <button class="btn" id="savePaymentBtn" onclick="savePaymentSettings()">Save</button>
+      </div>
+      <div class="sub" style="margin-top:8px;">Leave Maya blank to show GCash only on the storefront.</div>
+    </div>
+    <div class="panel">
       <h2>Add expense <span class="sm">marketing, delivery, labor, platform fees, etc.</span></h2>
       <div class="form-row">
         <div class="field"><label>Date</label><input type="date" id="expDate"></div>
@@ -2294,6 +2305,28 @@ async function saveCashSettings(){
     toast(friendlyError(e));
   } finally { if(btn) btn.disabled = !canWrite ? true : false; }
 }
+// Writes to settings/payment (a separate doc from settings/finance, since
+// it's readable by anonymous storefront visitors at checkout — keeping it
+// apart means the public read policy never has to touch the cash position).
+async function savePaymentSettings(){
+  if(blockIfNoEdit('finance')) return;
+  const gcashNumber = document.getElementById('paymentGcashNumber').value.trim();
+  const gcashName = document.getElementById('paymentGcashName').value.trim();
+  const mayaNumber = document.getElementById('paymentMayaNumber').value.trim();
+  const mayaName = document.getElementById('paymentMayaName').value.trim();
+  const btn = document.getElementById('savePaymentBtn');
+  if(btn) btn.disabled = true;
+  try{
+    await db.doc('settings/payment').set({
+      gcashNumber: gcashNumber || null, gcashName: gcashName || null,
+      mayaNumber: mayaNumber || null, mayaName: mayaName || null
+    });
+    toast('Payment details saved.', 'ok');
+  } catch(e){
+    console.error('savePaymentSettings failed', e);
+    toast(friendlyError(e));
+  } finally { if(btn) btn.disabled = !canWrite ? true : false; }
+}
 function renderFinance(){
   const kpiEl = document.getElementById('financeKpis');
   if(!kpiEl) return;
@@ -3326,6 +3359,18 @@ async function startApp(){
     renderFinance();
     renderCustomers();
   }, err=>console.error('finance settings', err));
+
+  db.doc('settings/payment').onSnapshot(snap=>{
+    const d = snap.exists ? snap.data() : {};
+    const gcashNumEl = document.getElementById('paymentGcashNumber');
+    const gcashNameEl = document.getElementById('paymentGcashName');
+    const mayaNumEl = document.getElementById('paymentMayaNumber');
+    const mayaNameEl = document.getElementById('paymentMayaName');
+    if(gcashNumEl) gcashNumEl.value = d.gcashNumber || '';
+    if(gcashNameEl) gcashNameEl.value = d.gcashName || '';
+    if(mayaNumEl) mayaNumEl.value = d.mayaNumber || '';
+    if(mayaNameEl) mayaNameEl.value = d.mayaName || '';
+  }, err=>console.error('payment settings', err));
 
   db.collection('production_batches').orderBy('ts','desc').onSnapshot(snap=>{
     productionBatchesList = snap.docs.map(d=>({id:d.id, ...d.data()}));
