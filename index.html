@@ -611,6 +611,11 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <div class="sub" style="margin:-4px 0 14px;">Orders placed on chugjugph.vercel.app land here first. Confirm to turn one into a real sale (deducts stock); decline to dismiss it.</div>
       <div id="onlineOrdersBody"></div>
     </div>
+    <div class="panel" id="abandonedCartsPanel" style="display:none;">
+      <h2>Abandoned carts <span class="sm" id="abandonedCartsCount"></span></h2>
+      <div class="sub" style="margin:-4px 0 14px;">Someone added items and left contact info on chugjugph.vercel.app without finishing checkout. Reach out while it's fresh.</div>
+      <div id="abandonedCartsBody"></div>
+    </div>
     <div class="cards" id="orderKpis"></div>
     <div class="panel">
       <h2>New order <span class="sm" id="orderNoPreview"></span></h2>
@@ -1522,6 +1527,7 @@ let expenseBudgetsList = []; // {id, category, monthlyBudget, ts}
 let recurringExpensesList = []; // {id, category, amount, paymentMethod, notes, dayOfMonth, active, lastRunMonth, ts}
 let promoCodesList = []; // {id, code, discountType, discountValue, active, maxUses, usedCount, expiresAt, ts}
 let notifyRequestsList = []; // {id, flavorId, flavorName, contact, contactType, notified, ts}
+let abandonedCartsList = []; // {id, items, subtotal, customerName, customerEmail, customerPhone, status, recoveredOrderNo, ts, createdAt}
 let purchaseOrdersList = []; // {id, poNo, supplierId, supplierName, status, items:[{componentId,componentName,qty,unitCost}], totalCost, orderedDate, receivedDate, notes, ts}
 let poDraftItems = [];    // in-memory, not persisted until the PO is created
 let cashSettings = { openingCash: 0 };
@@ -3342,6 +3348,11 @@ async function startApp(){
     renderNotifyRequests();
   }, err=>console.error('stock_notify_requests', err));
 
+  db.collection('abandoned_carts').orderBy('ts','desc').onSnapshot(snap=>{
+    abandonedCartsList = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderAbandonedCarts();
+  }, err=>console.error('abandoned_carts', err));
+
   db.collection('purchase_orders').orderBy('ts','desc').onSnapshot(snap=>{
     purchaseOrdersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderPurchaseOrders();
@@ -3723,6 +3734,63 @@ async function viewPaymentProof(path){
   } catch(e){
     console.error('viewPaymentProof failed', e);
     toast("Couldn't load the payment screenshot.");
+  }
+}
+
+// Carts that got left behind on the storefront with contact info attached —
+// the customer typed a name/email/phone at checkout but never placed the
+// order. Recovered carts (order was eventually placed) and carts staff have
+// already acted on (contacted/dismissed) are filtered out, leaving only
+// what's actually actionable.
+function renderAbandonedCarts(){
+  const panel = document.getElementById('abandonedCartsPanel');
+  const body = document.getElementById('abandonedCartsBody');
+  const countEl = document.getElementById('abandonedCartsCount');
+  if(!panel || !body) return;
+  const pending = abandonedCartsList.filter(c=>c.status==='abandoned');
+  panel.style.display = abandonedCartsList.length ? '' : 'none';
+  if(countEl) countEl.textContent = pending.length ? (pending.length+' to follow up') : 'none pending';
+  if(!pending.length){ body.innerHTML = '<div class="sub">No abandoned carts right now.</div>'; return; }
+  body.innerHTML = pending.map(c=>{
+    const items = c.items||[];
+    const itemsText = items.map(it=>`${it.name||it.flavorId} ×${it.qty}`).join(', ');
+    const when = c.ts ? timeAgo(c.ts) : '';
+    return `
+      <div class="weborder">
+        <div class="wo-head">
+          <strong>${c.customerName||'Anonymous visitor'}</strong>
+          <span class="sm mono">₱${Number(c.subtotal||0).toLocaleString()} · left ${when}</span>
+        </div>
+        <div class="wo-items">${itemsText||'No items'}</div>
+        <div class="wo-cust">
+          ${c.customerEmail?`Email: <a href="mailto:${c.customerEmail}" style="color:var(--cyan);">${c.customerEmail}</a><br>`:''}
+          ${c.customerPhone?`Phone: <a href="${waLink(c.customerPhone)}" target="_blank" rel="noopener" style="color:var(--cyan);">${c.customerPhone}</a><br>`:''}
+        </div>
+        <div class="wo-actions">
+          <button class="btn" onclick="markAbandonedCartContacted('${c.id}')">Mark contacted</button>
+          <button class="btn ghost" onclick="dismissAbandonedCart('${c.id}')">Dismiss</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+async function markAbandonedCartContacted(id){
+  if(blockIfNoEdit('sales')) return;
+  try{
+    await db.doc('abandoned_carts/'+id).update({status:'contacted'});
+    toast('Marked as contacted.', 'ok');
+  } catch(e){
+    console.error('markAbandonedCartContacted failed', e);
+    toast(friendlyError(e));
+  }
+}
+async function dismissAbandonedCart(id){
+  if(blockIfNoEdit('sales')) return;
+  try{
+    await db.doc('abandoned_carts/'+id).update({status:'dismissed'});
+    toast('Dismissed.', 'ok');
+  } catch(e){
+    console.error('dismissAbandonedCart failed', e);
+    toast(friendlyError(e));
   }
 }
 
