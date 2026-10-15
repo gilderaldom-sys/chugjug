@@ -116,6 +116,31 @@ a{color:inherit;}
 
 main{padding:32px 0 60px;min-width:0;}
 .view{display:none;}
+
+/* Help / SOP view */
+.help-intro p{font-size:13.5px;line-height:1.65;color:rgba(255,243,214,.85);margin-bottom:10px;}
+.help-search{width:100%;margin:6px 0 12px;padding:10px 12px;background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:6px;color:#fff;font-size:14px;}
+.help-search:focus{outline:none;border-color:var(--cyan);}
+.help-toc{display:flex;flex-wrap:wrap;gap:6px;}
+.help-toc a{font-family:var(--mono);font-size:11px;color:var(--cyan);text-decoration:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;}
+.help-toc a:hover{background:rgba(45,226,255,.1);}
+.panel.help-sec{padding:0;}
+.help-sec>summary{list-style:none;cursor:pointer;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.help-sec>summary::-webkit-details-marker{display:none;}
+.help-sec>summary h2{margin:0;}
+.help-sec>summary::after{content:'+';font-family:var(--mono);font-size:20px;color:var(--cyan);}
+.help-sec[open]>summary::after{content:'–';}
+.help-body{padding:0 20px 18px;font-size:13.5px;line-height:1.7;color:rgba(255,243,214,.9);}
+.help-body h3{font-size:14.5px;color:var(--cyan);margin:18px 0 6px;}
+.help-body p{margin-bottom:10px;}
+.help-body ul,.help-body ol{margin:0 0 12px 1.3em;}
+.help-body li{margin-bottom:5px;}
+.help-body strong{color:#fff;}
+.help-body table{margin:6px 0 12px;font-size:12.5px;}
+.help-body th,.help-body td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--border);}
+.help-body th{font-family:var(--mono);font-size:11px;color:var(--cyan);text-transform:uppercase;}
+.help-body mark,.help-intro mark{background:rgba(45,226,255,.28);color:#fff;border-radius:2px;}
+
 .view.active{display:block;}
 
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;margin-top:6px;}
@@ -438,6 +463,10 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <button data-view="settings">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.8v2.1M10 15.1v2.1M17.2 10h-2.1M4.9 10H2.8M15.1 4.9l-1.5 1.5M6.4 13.6l-1.5 1.5M15.1 15.1l-1.5-1.5M6.4 6.4 4.9 4.9"/></svg>
         <span>Settings</span>
+      </button>
+      <button data-view="help">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M7.8 7.8a2.3 2.3 0 1 1 3.3 2.1c-.7.4-1.1.9-1.1 1.7M10 14.3v.1"/></svg>
+        <span>Help</span>
       </button>
     </nav>
   </aside>
@@ -1111,6 +1140,273 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     </div>
   </section>
 
+<section class="view" id="v-help">
+<div class="panel help-head"><h2>Help &amp; SOP <span class="sm">standard operating procedure</span></h2>
+<div class="help-intro"><p>This SOP covers the Chug Jug PH admin dashboard at <strong>chugjug.vercel.app</strong> — the internal tool staff use to run the business day to day: confirming online orders, ringing up in-person sales, managing stock, and running promotions. It's the back office for the public storefront at <strong>chugjugph.vercel.app</strong>, where customers actually place orders — nothing here is customer-facing.</p></div>
+<input type="search" id="helpSearch" class="help-search" placeholder="Search the SOP…  (e.g. void, shift, promo code)" aria-label="Search the SOP" data-readonly-ok="1">
+<div class="help-toc" id="helpToc"></div></div>
+<div id="helpEmpty" class="panel" style="display:none;">No sections match your search.</div>
+<details class="panel help-sec" id="help-0" data-title="Logging in &amp; access"><summary><h2>Logging in &amp; access</h2></summary><div class="help-body"><p><strong>Signing in.</strong> On the login screen ("CONTROL ROOM"), enter your email and password and select <strong>Sign in</strong>. If you don't have an account yet, select <strong>"Need an account? Sign up"</strong>, fill in email and password, and select <strong>Create account</strong> — you'll see "Account created. Check your email to confirm, then sign in." Forgot your password? Use <strong>"Forgot password?"</strong> to get a reset email.</p>
+<p><strong>Creating an account is not the same as getting access.</strong> Signing up only creates a login — someone still has to grant you access to the sections you need. After signing in for the first time, you'll land on an <strong>"ACCESS PENDING"</strong> screen until that happens: <em>"Ask jhon@chugjug.ph to grant you access to the sections you need, from Settings → Team &amp; Access."</em></p>
+<p><strong>Roles.</strong></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Role</th>
+<th>What they can do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Main admin (jhon@chugjug.ph)</td>
+<td>Full access to everything, always — hardcoded, can't be changed or removed.</td>
+</tr>
+<tr>
+<td>Admin</td>
+<td>Full access to every section, including Team &amp; Access itself.</td>
+</tr>
+<tr>
+<td>Member</td>
+<td>Access is set per section: <strong>None</strong>, <strong>View</strong>, or <strong>Edit</strong>, chosen individually for each of the 13 sections.</td>
+</tr>
+</tbody>
+</table></div>
+<p>A member with only <strong>View</strong> on a section can see it but every control is disabled. A member with <strong>Edit</strong> can make changes. A member granted only POS access is taken straight to the POS Terminal on login instead of an empty Overview page — useful for cashiers who only ever need to ring up sales.</p>
+<p><strong>Granting access (admin only).</strong> Go to <strong>Settings → Team &amp; access</strong>. Enter the person's email (and optionally their name), pick <strong>Member</strong> or <strong>Admin</strong> as their role, and for a Member set each section's dropdown to None/View/Edit as needed. Select <strong>Save access</strong>. To change someone's access later, find them in the table and adjust; to remove someone, use the remove action next to their row — they'll see <em>"{email} no longer has access."</em></p></div></details>
+<details class="panel help-sec" id="help-1" data-title="Navigation"><summary><h2>Navigation</h2></summary><div class="help-body"><p>The sidebar has 13 sections plus this Help tab. Every approved user sees Overview and Help; everything else depends on their permissions.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overview</td>
+<td>Dashboard landing page.</td>
+</tr>
+<tr>
+<td>POS Terminal</td>
+<td>In-person checkout — scan/search, cart, payment, receipt, shift management.</td>
+</tr>
+<tr>
+<td>Inventory</td>
+<td>Stock levels, low-stock threshold, pricing, Party Pack bundle settings, stock movement log, back-in-stock requests.</td>
+</tr>
+<tr>
+<td>Orders</td>
+<td>Online order queue, abandoned carts, referral program, manual order entry, fulfillment queue.</td>
+</tr>
+<tr>
+<td>Products</td>
+<td>Flavor catalog, pricing, barcodes, recipe/costing, active/inactive toggle.</td>
+</tr>
+<tr>
+<td>Production</td>
+<td>Production batch tracking.</td>
+</tr>
+<tr>
+<td>Geography</td>
+<td>Location/region breakdown of sales.</td>
+</tr>
+<tr>
+<td>Targets</td>
+<td>Sales/revenue targets tracking.</td>
+</tr>
+<tr>
+<td>Suppliers</td>
+<td>Supplier directory and purchase orders.</td>
+</tr>
+<tr>
+<td>Finance</td>
+<td>Cash position, payment details (GCash/Maya), expenses, promo codes.</td>
+</tr>
+<tr>
+<td>Customers</td>
+<td>Customer directory, top customers, win-back list, loyalty program, birthdays.</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td>Exportable reports.</td>
+</tr>
+<tr>
+<td>Settings</td>
+<td>Team &amp; Access, backup/restore, activity log.</td>
+</tr>
+</tbody>
+</table></div>
+<p>The POS, Inventory and Orders tabs show a live badge count in the sidebar when there's something pending (e.g. unconfirmed online orders).</p></div></details>
+<details class="panel help-sec" id="help-2" data-title="Orders"><summary><h2>Orders</h2></summary><div class="help-body"><h3>Incoming online orders</h3>
+<p>Orders placed on chugjugph.vercel.app land in the <strong>"Online orders"</strong> panel at the top of the Orders tab: <em>"Orders placed on chugjugph.vercel.app land here first. Confirm to turn one into a real sale (deducts stock); decline to dismiss it."</em> Each card shows the customer, items, subtotal, any promo/bundle/referral discount applied, payment method, a payment status pill (UNPAID/PARTIAL/PAID), and a <strong>"view proof"</strong> button if a payment screenshot was uploaded.</p>
+<p>For each order:</p>
+<ol>
+<li><strong>Check the payment proof</strong> (if attached) matches the amount due.</li>
+<li>Select <strong>"Confirm → create sale"</strong> to accept the order — this creates the sale record(s), deducts stock and recipe ingredients, and generates an order number. Or select <strong>"Decline"</strong> to dismiss it (e.g. payment never came through, out of stock).</li>
+<li>If payment comes in after confirming, use <strong>"Mark paid"</strong> on that order.</li>
+</ol>
+<p>Requires Edit access on Orders. Confirming with no items will show <em>"This order has no items to confirm."</em></p>
+<h3>Fulfillment queue</h3>
+<p>Below that, the <strong>"Fulfillment queue"</strong> table lists every sale not yet delivered. Each row has two dropdowns to update as the order moves: <strong>Order status</strong> (New → Confirmed → Preparing → Ready → Dispatched → Delivered, or Cancelled/Refunded) and <strong>Delivery status</strong> (Pending → Out for delivery → Delivered, or Failed). Update these as the order actually progresses so the queue count stays accurate.</p>
+<h3>Manual / phone orders</h3>
+<p>For an order taken by phone or in person that isn't going through the storefront, use the <strong>"New order"</strong> form on the same tab: customer name, phone, flavor, quantity, location, payment method, payment status, discount, delivery fee, rider, and notes. Select <strong>"Create order"</strong>.</p>
+<h3>Voiding an order</h3>
+<p>If an order needs to be reversed (wrong item, customer cancelled after confirming, etc.), open the order and void it — you'll be asked for a reason (required). Voiding restores the stock and ingredients that were deducted and marks the order Refunded. Anyone with Edit access on Orders <em>or</em> POS can void; an already-voided order can't be voided again.</p>
+<h3>Abandoned carts</h3>
+<p>Also on the Orders tab: a list of storefront visitors who added items and left contact info but didn't finish checkout — <em>"Reach out while it's fresh."</em> Each card has a WhatsApp or email link to reach out directly, plus <strong>"Mark contacted"</strong> and <strong>"Dismiss"</strong> to clear it from the list once you've followed up (or decided not to).</p></div></details>
+<details class="panel help-sec" id="help-3" data-title="Inventory &amp; products"><summary><h2>Inventory &amp; products</h2></summary><div class="help-body"><h3>Stock levels (Inventory tab)</h3>
+<p>Each active flavor has a row with:</p>
+<ul>
+<li><strong>Stock</strong> — adjust with the −/+ stepper, or type an exact number.</li>
+<li><strong>Low stock threshold</strong> — the stock level that triggers the "low stock" pill (default 10). Below this, the row is flagged and the storefront shows "Only X left!" on that flavor.</li>
+<li><strong>Price</strong> — editable per flavor, reflected immediately on the storefront.</li>
+</ul>
+<p>A <strong>"Recent stock movements"</strong> log below shows every adjustment (when, item, quantity, direction, reason) for traceability.</p>
+<h3>Sold out / discontinuing a flavor (Products tab)</h3>
+<p>Stock hitting zero automatically shows "Sold out" on the storefront and in POS — no action needed. To pull a flavor entirely (discontinue it), go to <strong>Products</strong> and select <strong>"deactivate"</strong> on that product. Deactivated products disappear from Inventory, POS, and the storefront. Reverse with <strong>"activate"</strong>.</p>
+<h3>Back-in-stock requests</h3>
+<p>When a flavor is sold out, customers can ask to be notified when it's back. These requests appear grouped by flavor on the Inventory tab with a contact link (WhatsApp/email). Once you've reached out or restocked, select <strong>"mark notified"</strong> to clear the request.</p>
+<h3>Adding a new flavor (Products tab)</h3>
+<p>Fill in Name, Category (defaults to "Cocktail Kit"), Selling price, and Description, then save — this creates both the product listing and its inventory entry. Use the <strong>"gen"</strong> button to auto-generate a barcode for POS scanning, and the <strong>"recipe"</strong> button to set the ingredient costing (used to calculate gross profit and margin).</p></div></details>
+<details class="panel help-sec" id="help-4" data-title="Promotions"><summary><h2>Promotions</h2></summary><div class="help-body"><p>Three independent promo systems, each with its own on/off switch — turning one on doesn't affect the others, and all three can run at once.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th></th>
+<th>Where</th>
+<th>What it does</th>
+<th>How to turn it on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Party Pack bundle</strong></td>
+<td>Inventory tab</td>
+<td>Auto-applies a flat price when a customer buys N jugs (any mix of flavors)</td>
+<td>Set <strong>Jugs per bundle</strong>, <strong>Bundle price</strong>, <strong>Deal name</strong>, optional <strong>Description</strong> → <strong>Save</strong> → <strong>Activate</strong></td>
+</tr>
+<tr>
+<td><strong>Referral program</strong></td>
+<td>Orders tab</td>
+<td>Customers get a shareable code after their first order; referring a friend earns both sides a discount/reward</td>
+<td>Set <strong>Friend's discount</strong> and <strong>Referrer's reward</strong> → <strong>Save</strong> → <strong>Activate</strong></td>
+</tr>
+<tr>
+<td><strong>Promo codes</strong></td>
+<td>Finance tab</td>
+<td>One-off or ongoing discount codes customers enter at checkout</td>
+<td><strong>Add code</strong> with a code, type (% or ₱ off), value, and optional max uses / expiry</td>
+</tr>
+</tbody>
+</table></div>
+<h3>Party Pack bundle</h3>
+<p>On the Inventory tab, the <strong>"Party pack deal"</strong> panel shows the current status under the form (<em>"Deal is currently off — customers won't see it"</em> when inactive). Fill in jugs-per-bundle (minimum 2), the flat bundle price, a deal name, and an optional description, then <strong>Save</strong>. Select <strong>Activate</strong> to make it live on the storefront, or <strong>Deactivate</strong> to pause it without losing the settings.</p>
+<h3>Referral program</h3>
+<p>On the Orders tab, set the <strong>Friend's discount</strong> (what a new customer gets for using a referral code) and the <strong>Referrer's reward</strong> (what the existing customer gets once their friend's order goes through), then <strong>Save</strong> and <strong>Activate</strong>.</p>
+<p>Rewards aren't paid out automatically — they show up in the <strong>"Referral rewards to send"</strong> panel below once a referred order comes through. For each one, select <strong>"Generate reward code &amp; mark sent"</strong>: this creates a one-time promo code for that amount and shows it to you to send the referrer over WhatsApp.</p>
+<h3>Promo codes</h3>
+<p>On the Finance tab, enter a <strong>Code</strong> (e.g. WELCOME10), choose <strong>% off</strong> or <strong>₱ off</strong>, a <strong>Value</strong>, and optionally a <strong>max uses</strong> or <strong>expiry date</strong>, then <strong>Add code</strong>. Codes can be <strong>paused/resumed</strong> or <strong>deleted</strong> from the table at any time; the table also shows how many times each code has been used. Codes must be unique — re-using an existing code is rejected.</p>
+<p>Note: loyalty rewards and birthday treats (see Sales &amp; Retention below) also create one-time codes in this same promo codes list, so you may see codes you didn't create by hand (prefixed <code>LOYALTY-</code>, <code>BDAY-</code>, or <code>REFERRAL-</code>) — that's expected.</p></div></details>
+<details class="panel help-sec" id="help-5" data-title="POS &amp; customer retention"><summary><h2>POS &amp; customer retention</h2></summary><div class="help-body"><h3>Opening a shift</h3>
+<p>Before ringing up anything on the POS Terminal, start a shift: record your <strong>opening cash</strong> balance and select <strong>Start shift</strong>. You can only have one shift open at a time. At the end of the day, <strong>Close shift</strong> — enter the actual cash counted, and the system shows the variance against what it expected (it'll say "drawer balanced exactly" if it matches).</p>
+<h3>Ringing up a sale</h3>
+<ol>
+<li>Add items by <strong>scanning a barcode</strong> (select "Start camera") or by typing a name/barcode into the search box.</li>
+<li>Adjust quantities in the cart ("Current order") on the right.</li>
+<li>Enter the customer's name (defaults to "Walk-in" if not given).</li>
+<li>Choose a <strong>payment method</strong> (Cash, GCash, Maya, Bank Transfer, Card). For Cash, enter the amount tendered — change due is calculated automatically.</li>
+<li>Select <strong>"Complete sale &amp; print receipt."</strong></li>
+</ol>
+<p>If the cart is empty, cash tendered is less than the total, or there isn't enough stock, you'll get a message instead of a sale — fix the issue and try again. If the receipt doesn't open, your browser likely blocked the pop-up; allow pop-ups for this site and try again.</p>
+<p>A cashier with POS-only access is taken straight into this screen on login and won't see the rest of the dashboard.</p>
+<h3>Abandoned carts</h3>
+<p>See the Orders section above — the same panel lives there and is the main tool for following up with customers who didn't finish checking out.</p>
+<h3>Loyalty program (Customers tab)</h3>
+<p>Set <strong>every N paid orders</strong> and a <strong>reward value (₱)</strong>, then <strong>Save</strong>. Customers who cross a multiple of N orders show up below as eligible for a reward — select the redemption action to generate a one-time code to share with them.</p>
+<h3>Birthdays (Customers tab)</h3>
+<p>Customers with a birthday in the next 30 days are listed automatically. Select <strong>"send birthday treat"</strong> to generate a one-time discount code (same value as the loyalty reward) to send them. Birthdays are entered/edited directly in the customer table.</p>
+<h3>Customer status (automatic)</h3>
+<p>Every customer is automatically tagged <strong>New</strong>, <strong>Repeat</strong>, <strong>VIP</strong> (₱10,000+ lifetime spend or 8+ orders), <strong>Dormant</strong> (no order in 90+ days), or <strong>One-time</strong> — this drives the <strong>Win-back list</strong> (dormant customers worth reaching out to) and <strong>Top customers</strong> panel. Nothing to configure here; it updates on its own.</p></div></details>
+<details class="panel help-sec" id="help-6" data-title="Payment details"><summary><h2>Payment details</h2></summary><div class="help-body"><p>On the Finance tab, the <strong>"Payment details"</strong> panel controls what customers see at storefront checkout — this is the only part of Finance that's publicly visible, kept separate from cash position for that reason.</p>
+<p>Fill in:</p>
+<ul>
+<li><strong>GCash number</strong> and <strong>GCash account name</strong></li>
+<li><strong>Maya number</strong> and <strong>Maya account name</strong> (optional)</li>
+</ul>
+<p>Select <strong>Save</strong>. Leave Maya blank to show GCash only on the storefront. Changes take effect immediately — double-check the number before saving, since customers will be sending payment to it right away.</p></div></details>
+<details class="panel help-sec" id="help-7" data-title="Troubleshooting"><summary><h2>Troubleshooting</h2></summary><div class="help-body"><div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Message</th>
+<th>What it means</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"ACCESS PENDING" after signing in</td>
+<td>You have a login but no permissions yet</td>
+<td>Ask jhon@chugjug.ph to grant access under Settings → Team &amp; Access</td>
+</tr>
+<tr>
+<td>A tab is visible but every control is greyed out</td>
+<td>You have View but not Edit on that section</td>
+<td>Ask the admin to upgrade your permission to Edit, then log out and back in</td>
+</tr>
+<tr>
+<td>"You don't have permission to modify {section}."</td>
+<td>You tried to save something you only have View (or no) access to</td>
+<td>Same as above</td>
+</tr>
+<tr>
+<td>"Couldn't save — you don't have permission to write this."</td>
+<td>A database-level permission error, separate from the message above</td>
+<td>Usually fixed by logging out and back in; if it persists, it's an actual access-policy gap — escalate to the admin/developer</td>
+</tr>
+<tr>
+<td>"Couldn't reach the database. Check your connection and try again."</td>
+<td>Network issue</td>
+<td>Check your internet connection and retry</td>
+</tr>
+<tr>
+<td>"Couldn't save — the database is missing a field this form needs."</td>
+<td>A schema/dev issue, not something staff can fix</td>
+<td>Escalate to the developer/admin</td>
+</tr>
+<tr>
+<td>"This order is already voided."</td>
+<td>You tried to void an order twice</td>
+<td>No action needed — it's already reversed</td>
+</tr>
+<tr>
+<td>"A reason is required to void an order."</td>
+<td>The void reason field was left blank</td>
+<td>Enter a reason and try again</td>
+</tr>
+<tr>
+<td>"Not enough stock." / "No product matches that barcode."</td>
+<td>POS checkout issue</td>
+<td>Check the item's stock on the Inventory tab, or search by name instead of scanning</td>
+</tr>
+<tr>
+<td>"Cash tendered is less than the total."</td>
+<td>POS cash entry too low</td>
+<td>Re-enter the amount actually received</td>
+</tr>
+<tr>
+<td>"You already have a shift open."</td>
+<td>Tried to start a second shift</td>
+<td>Close the current shift first</td>
+</tr>
+<tr>
+<td>"Your browser blocked the new tab — please allow pop-ups..."</td>
+<td>Printing a receipt or purchase order was blocked</td>
+<td>Allow pop-ups for chugjug.vercel.app in your browser and retry</td>
+</tr>
+</tbody>
+</table></div>
+<p>For anything not covered here, contact jhon@chugjug.ph.</p></div></details>
+</section>
 </main>
   </div>
 </div>
@@ -1344,6 +1640,7 @@ let teamMembersList = []; // {id(=email), email, displayName, role, permissions,
 function canView(section){
   if(isAdminUser) return true;
   if(section === 'overview') return true; // every approved user gets at least the dashboard
+  if(section === 'help') return true;     // the SOP is for everyone; not a permission section
   const p = myPermissions[section];
   return p === 'view' || p === 'edit';
 }
@@ -3251,6 +3548,51 @@ document.querySelectorAll('.sidebar-nav button').forEach(btn=>{
     closeMobileNav();
   });
 });
+
+
+// --- Help / SOP view: contents chips, search + highlight ---
+(function(){
+  const view = document.getElementById('v-help');
+  if(!view) return;
+  const secs = Array.from(view.querySelectorAll('.help-sec'));
+  const toc = document.getElementById('helpToc');
+  secs.forEach(s=>{
+    const a = document.createElement('a');
+    a.href = '#'+s.id; a.textContent = s.dataset.title;
+    a.addEventListener('click', e=>{ e.preventDefault(); s.open = true; s.scrollIntoView({behavior:'smooth', block:'start'}); });
+    toc.appendChild(a);
+  });
+  const input = document.getElementById('helpSearch');
+  const empty = document.getElementById('helpEmpty');
+  const originals = new Map();
+  secs.forEach(s=>originals.set(s, s.querySelector('.help-body').innerHTML));
+  function esc(r){ return r.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+  function run(){
+    const q = input.value.trim();
+    let shown = 0;
+    secs.forEach(s=>{
+      const body = s.querySelector('.help-body');
+      body.innerHTML = originals.get(s);
+      if(!q){ s.style.display=''; return; }
+      const hit = (s.dataset.title+' '+body.textContent).toLowerCase().includes(q.toLowerCase());
+      s.style.display = hit ? '' : 'none';
+      if(hit){
+        shown++; s.open = true;
+        const re = new RegExp(esc(q),'gi');
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+        const nodes = []; while(walker.nextNode()) nodes.push(walker.currentNode);
+        nodes.forEach(n=>{
+          if(!re.test(n.nodeValue)) return; re.lastIndex = 0;
+          const span = document.createElement('span');
+          span.innerHTML = n.nodeValue.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(re, m=>'<mark>'+m+'</mark>');
+          n.parentNode.replaceChild(span, n);
+        });
+      }
+    });
+    empty.style.display = (q && !shown) ? '' : 'none';
+  }
+  input.addEventListener('input', run);
+})();
 
 // sale flavor select
 const saleFlavorSel = document.getElementById('saleFlavor');
