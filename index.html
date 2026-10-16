@@ -139,6 +139,11 @@ main{padding:32px 0 60px;min-width:0;}
 .help-body table{margin:6px 0 12px;font-size:12.5px;}
 .help-body th,.help-body td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--border);}
 .help-body th{font-family:var(--mono);font-size:11px;color:var(--cyan);text-transform:uppercase;}
+.help-list{margin:0 0 0 1.2em;font-size:13.5px;line-height:1.7;color:rgba(255,243,214,.9);} .help-list li{margin-bottom:6px;}
+.help-check{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:13.5px;line-height:1.5;cursor:pointer;}
+.help-check input{margin-top:3px;accent-color:var(--cyan);}
+.help-check.done span{opacity:.5;text-decoration:line-through;}
+.ss-block h4{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--cyan);margin:14px 0 6px;}
 .help-body mark,.help-intro mark{background:rgba(45,226,255,.28);color:#fff;border-radius:2px;}
 
 .view.active{display:block;}
@@ -573,7 +578,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       <h2>Shift history <span class="sm">last 20 shifts, most recent first</span></h2>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Cashier</th><th>Opened</th><th>Closed</th><th>Opening</th><th>Expected</th><th>Actual</th><th>Variance</th></tr></thead>
+        <thead><tr><th>Cashier</th><th>Opened</th><th>Closed</th><th>Opening</th><th>Expected</th><th>Actual</th><th>Variance</th><th></th></tr></thead>
         <tbody id="shiftHistoryBody"></tbody>
       </table>
       </div>
@@ -1089,6 +1094,18 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
       </div>
       <div class="cards" id="reportKpis"></div>
     </div>
+    <div class="panel" id="bestSellersPanel">
+      <h2>Best sellers by day <span class="sm">units sold per flavor, by day of the week</span></h2>
+      <div class="ov-filter" style="margin-bottom:12px;">
+        <select id="bsRange" data-readonly-ok="1" onchange="renderBestSellers()" style="background:rgba(0,0,0,.3);color:#fff;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;">
+          <option value="30">Last 30 days</option>
+          <option value="90" selected>Last 90 days</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+      <div id="bestSellersInsight" class="sub" style="margin:0 0 12px;"></div>
+      <div class="table-scroll"><div id="bestSellersGrid"></div></div>
+    </div>
     <div class="panel">
       <h2>Export data <span class="sm">CSV or JSON, per report</span></h2>
       <div class="sub" style="margin:-4px 0 14px;">Exports reflect the current period selected above where relevant (Sales); other exports are always the full dataset.</div>
@@ -1145,6 +1162,14 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 <div class="help-intro"><p>This SOP covers the Chug Jug PH admin dashboard at <strong>chugjug.vercel.app</strong> — the internal tool staff use to run the business day to day: confirming online orders, ringing up in-person sales, managing stock, and running promotions. It's the back office for the public storefront at <strong>chugjugph.vercel.app</strong>, where customers actually place orders — nothing here is customer-facing.</p></div>
 <input type="search" id="helpSearch" class="help-search" placeholder="Search the SOP…  (e.g. void, shift, promo code)" aria-label="Search the SOP" data-readonly-ok="1">
 <div class="help-toc" id="helpToc"></div></div>
+<div class="panel help-extra" id="helpWhatsNew"><h2>What's new <span class="sm">latest changes to the dashboard</span></h2>
+<ul class="help-list">
+<li><b>Oct 17</b> — <b>End-of-shift summary.</b> Closing a shift now shows one page: sales by payment method, what sold, cash result, voids and low stock. Print it, or reopen any past shift with <b>Summary</b> in Shift history (POS tab).</li>
+<li><b>Oct 17</b> — <b>Best sellers by day.</b> Reports tab: units per flavor for each day of the week, so you know what to stock before busy days.</li>
+<li><b>Oct 16</b> — <b>Help tab.</b> This page: the full operating procedure, searchable.</li>
+</ul></div>
+<div class="panel help-extra" id="helpChecklist"><h2>First-day checklist <span class="sm">tick as you go — saved on this device</span></h2>
+<div id="helpChecklistItems"></div></div>
 <div id="helpEmpty" class="panel" style="display:none;">No sections match your search.</div>
 <details class="panel help-sec" id="help-0" data-title="Logging in &amp; access"><summary><h2>Logging in &amp; access</h2></summary><div class="help-body"><p><strong>Signing in.</strong> On the login screen ("CONTROL ROOM"), enter your email and password and select <strong>Sign in</strong>. If you don't have an account yet, select <strong>"Need an account? Sign up"</strong>, fill in email and password, and select <strong>Create account</strong> — you'll see "Account created. Check your email to confirm, then sign in." Forgot your password? Use <strong>"Forgot password?"</strong> to get a reset email.</p>
 <p><strong>Creating an account is not the same as getting access.</strong> Signing up only creates a login — someone still has to grant you access to the sections you need. After signing in for the first time, you'll land on an <strong>"ACCESS PENDING"</strong> screen until that happens: <em>"Ask jhon@chugjug.ph to grant you access to the sections you need, from Settings → Team &amp; Access."</em></p>
@@ -3158,9 +3183,43 @@ function getReportRange(){
   if(reportPeriod==='monthly') return { start: monthStr()+'-01', end: today, label: monthStr() };
   return { start: today, end: today, label: 'today' };
 }
+// --- Best sellers by day of week -------------------------------------------
+function renderBestSellers(){
+  const grid = document.getElementById('bestSellersGrid');
+  if(!grid) return;
+  const rangeSel = document.getElementById('bsRange');
+  const days = rangeSel ? rangeSel.value : '90';
+  let since = '';
+  if(days!=='all'){ const d = new Date(); d.setDate(d.getDate()-parseInt(days,10)); since = d.toISOString().slice(0,10); }
+  const names = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const order = [1,2,3,4,5,6,0];
+  const sales = salesList.filter(s=>!s.voided && s.date && (!since || s.date>=since));
+  const flavors = []; const grid2 = {}; const dayTotals = Array(7).fill(0); const dayDates = Array.from({length:7},()=>new Set());
+  sales.forEach(s=>{
+    const wd = new Date(s.date+'T00:00:00').getDay(); if(isNaN(wd)) return;
+    const f = s.flavorName||s.flavorId||'Item';
+    if(!flavors.includes(f)) flavors.push(f);
+    (grid2[f] = grid2[f] || Array(7).fill(0))[wd] += (s.qty||0);
+    dayTotals[wd] += (s.qty||0); dayDates[wd].add(s.date);
+  });
+  const insight = document.getElementById('bestSellersInsight');
+  if(!sales.length){ grid.innerHTML = '<div class="empty">No sales in this period yet.</div>'; if(insight) insight.textContent=''; return; }
+  flavors.sort((a,b)=>grid2[b].reduce((x,y)=>x+y,0)-grid2[a].reduce((x,y)=>x+y,0));
+  const max = Math.max(1, ...flavors.flatMap(f=>grid2[f]));
+  const best = order.slice().sort((a,b)=>dayTotals[b]-dayTotals[a])[0];
+  const topFlavor = flavors[0];
+  const topDayForFlavor = order.slice().sort((a,b)=>grid2[topFlavor][b]-grid2[topFlavor][a])[0];
+  if(insight) insight.innerHTML = `Busiest day: <b>${names[best]}</b> (${dayTotals[best]} units). Top flavor: <b>${escH(topFlavor)}</b>, selling most on <b>${names[topDayForFlavor]}</b>. Stock up the day before.`;
+  const cell = n => `<td class="mono" style="text-align:center;background:rgba(45,226,255,${(n/max*0.55).toFixed(2)});">${n||''}</td>`;
+  grid.innerHTML = `<table style="min-width:460px;"><thead><tr><th>Flavor</th>${order.map(d=>`<th style="text-align:center;">${names[d]}</th>`).join('')}<th style="text-align:center;">Total</th></tr></thead><tbody>
+    ${flavors.map(f=>`<tr><td>${escH(f)}</td>${order.map(d=>cell(grid2[f][d])).join('')}<td class="mono" style="text-align:center;">${grid2[f].reduce((a,b)=>a+b,0)}</td></tr>`).join('')}
+    <tr><td><b>All flavors</b></td>${order.map(d=>`<td class="mono" style="text-align:center;"><b>${dayTotals[d]}</b></td>`).join('')}<td class="mono" style="text-align:center;"><b>${dayTotals.reduce((a,b)=>a+b,0)}</b></td></tr>
+  </tbody></table>`;
+}
 function renderReports(){
   const kpiEl = document.getElementById('reportKpis');
   if(!kpiEl) return;
+  renderBestSellers();
   const range = getReportRange();
   const periodSales = salesList.filter(s=>s.date && s.date>=range.start && s.date<=range.end);
   const revenue = periodSales.reduce((a,s)=>a+(s.total!=null?s.total:s.revenue||0),0);
@@ -3592,6 +3651,30 @@ document.querySelectorAll('.sidebar-nav button').forEach(btn=>{
     empty.style.display = (q && !shown) ? '' : 'none';
   }
   input.addEventListener('input', run);
+})();
+
+
+// First-day checklist: purely a per-device convenience, so localStorage is fine (and optional).
+(function(){
+  const host = document.getElementById('helpChecklistItems');
+  if(!host) return;
+  const items = [
+    'Sign in and check the badge at the top shows the right email and role.',
+    'Look at the sidebar: these are the tabs you can use. Ask the admin if one you need is missing.',
+    'Skim the Navigation section below so you know what each tab is for.',
+    'Allow pop-ups for this site, so receipts and summaries can print.',
+    'POS users: start a shift with your opening cash before ringing anything up.',
+    'Know how to void a wrong order (Help → Orders → Voiding an order). A reason is required.',
+    'At the end of the day: close your shift, count the drawer honestly, and print the summary.'
+  ];
+  let done = {};
+  try{ done = JSON.parse(localStorage.getItem('cj_help_checklist')||'{}')||{}; }catch(e){}
+  host.innerHTML = items.map((t,i)=>`<label class="help-check ${done[i]?'done':''}"><input type="checkbox" data-i="${i}" ${done[i]?'checked':''}><span>${t}</span></label>`).join('');
+  host.addEventListener('change', e=>{
+    const cb = e.target; if(!cb.matches('input[type=checkbox]')) return;
+    done[cb.dataset.i] = cb.checked; cb.closest('.help-check').classList.toggle('done', cb.checked);
+    try{ localStorage.setItem('cj_help_checklist', JSON.stringify(done)); }catch(err){}
+  });
 })();
 
 // sale flavor select
@@ -4442,6 +4525,7 @@ function openShiftModal(){
   if(!canVoidSale()){ toast("You don't have permission to run the POS terminal."); return; }
   if(myOpenShift()){ toast('You already have a shift open.'); return; }
   const box = document.getElementById('shiftModalBox');
+  box.style.maxWidth = '380px';
   box.innerHTML = `
     <h3>Start shift</h3>
     <div class="field" style="margin-top:10px;"><label>Starting cash in the drawer</label>
@@ -4475,6 +4559,7 @@ function openCloseShiftModal(){
   if(!shift){ toast('No open shift to close.'); return; }
   const expected = computeExpectedCash(shift);
   const box = document.getElementById('shiftModalBox');
+  box.style.maxWidth = '380px';
   box.innerHTML = `
     <h3>Close shift</h3>
     <div class="order-summary" style="margin:10px 0;">
@@ -4509,7 +4594,7 @@ async function confirmCloseShift(){
     });
     shift.status='CLOSED'; shift.closedAt=Date.now(); shift.expectedCash=expectedCash; shift.actualCash=actualCash; shift.variance=variance; shift.notes=notes;
     renderPosShiftBar(); renderShiftHistory();
-    closeShiftModal();
+    showShiftSummary(shift.id);
     if(Math.abs(variance)<0.01) toast('Shift closed — drawer balanced exactly.', 'ok');
     else toast(`Shift closed — ${variance>=0?'over':'short'} by ${fmtPeso(Math.abs(variance))}.`, variance<0?'warn':'ok');
   } catch(e){
@@ -4517,11 +4602,96 @@ async function confirmCloseShift(){
     toast(friendlyError(e));
   } finally { if(btn) btn.disabled = false; }
 }
+// --- End-of-shift summary --------------------------------------------------
+// One page with everything a manager checks when a drawer is closed: sales by
+// payment method, what sold, voids, the cash reconciliation and what is low.
+const escH = v => String(v==null?'':v).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function shiftSummaryData(shift){
+  const end = shift.closedAt || Date.now();
+  const mine = salesList.filter(s=>s.notes==='POS sale' && s.cashierEmail===shift.cashierEmail && (s.ts||0)>=(shift.openedAt||0) && (s.ts||0)<=end);
+  const amt = s => s.total!=null ? s.total : (s.revenue||0);
+  const good = mine.filter(s=>!s.voided), voided = mine.filter(s=>s.voided);
+  const byMethod = {}, byFlavor = {};
+  const orders = new Set();
+  good.forEach(s=>{
+    const m = s.paymentMethod||'Other';
+    (byMethod[m] = byMethod[m] || {orders:new Set(), total:0}).orders.add(s.orderNo||s.id);
+    byMethod[m].total += amt(s);
+    const f = s.flavorName||s.flavorId||'Item';
+    (byFlavor[f] = byFlavor[f] || {qty:0, total:0});
+    byFlavor[f].qty += (s.qty||0); byFlavor[f].total += amt(s);
+    orders.add(s.orderNo||s.id);
+  });
+  const total = good.reduce((a,s)=>a+amt(s),0);
+  const cashSales = good.filter(s=>s.paymentMethod==='Cash').reduce((a,s)=>a+amt(s),0);
+  const low = computeLowStockProducts().map(p=>`${p.name} (${(inventory[p.id]||{}).stock||0} left)`)
+    .concat(computeLowStockComponents().map(c=>`${c.name} (${c.stock||0} ${c.unit||''} left)`));
+  const expected = shift.expectedCash!=null ? shift.expectedCash : computeExpectedCash(shift);
+  return { shift, end, total, orderCount: orders.size, cashSales, expected,
+    byMethod: Object.entries(byMethod).map(([k,v])=>({method:k, orders:v.orders.size, total:v.total})).sort((a,b)=>b.total-a.total),
+    byFlavor: Object.entries(byFlavor).map(([k,v])=>({name:k, qty:v.qty, total:v.total})).sort((a,b)=>b.qty-a.qty),
+    voidCount: new Set(voided.map(s=>s.orderNo||s.id)).size, voidTotal: voided.reduce((a,s)=>a+amt(s),0), low };
+}
+function shiftSummaryInner(shift){
+  const d = shiftSummaryData(shift);
+  const fmt = t => new Date(t).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const variance = shift.variance;
+  const vText = variance==null ? 'Shift still open' : Math.abs(variance)<0.01 ? 'Drawer balanced exactly' : `${variance>=0?'Over':'Short'} by ${fmtPeso(Math.abs(variance))}`;
+  const rows = (arr, f) => arr.length ? arr.map(f).join('') : '<div><span>None</span><span></span></div>';
+  return `
+    <div class="sub" style="margin:0 0 10px;">${escH(shift.cashierName||shift.cashierEmail)} · ${fmt(shift.openedAt)} → ${shift.closedAt?fmt(shift.closedAt):'now (still open)'}</div>
+    <div class="ss-block"><h4>Sales</h4><div class="order-summary">
+      <div><span>Orders rung up</span><span>${d.orderCount}</span></div>
+      <div><span><b>Total sales</b></span><span><b>${fmtPeso(d.total)}</b></span></div>
+      ${rows(d.byMethod, m=>`<div><span>${escH(m.method)} (${m.orders})</span><span>${fmtPeso(m.total)}</span></div>`)}
+    </div></div>
+    <div class="ss-block"><h4>What sold</h4><div class="order-summary">
+      ${rows(d.byFlavor, f=>`<div><span>${escH(f.name)} × ${f.qty}</span><span>${fmtPeso(f.total)}</span></div>`)}
+    </div></div>
+    <div class="ss-block"><h4>Cash drawer</h4><div class="order-summary">
+      <div><span>Opening cash</span><span>${fmtPeso(shift.openingCash||0)}</span></div>
+      <div><span>Cash sales</span><span>${fmtPeso(d.cashSales)}</span></div>
+      <div><span>Expected</span><span>${fmtPeso(d.expected)}</span></div>
+      <div><span>Counted</span><span>${shift.actualCash!=null?fmtPeso(shift.actualCash):'—'}</span></div>
+      <div><span><b>Result</b></span><span><b>${vText}</b></span></div>
+      ${shift.notes?`<div><span>Notes</span><span>${escH(shift.notes)}</span></div>`:''}
+    </div></div>
+    <div class="ss-block"><h4>Voids</h4><div class="order-summary">
+      <div><span>Voided orders</span><span>${d.voidCount}${d.voidCount?` · ${fmtPeso(d.voidTotal)}`:''}</span></div>
+    </div></div>
+    <div class="ss-block"><h4>Low stock right now</h4><div class="order-summary">
+      ${rows(d.low, t=>`<div><span>${escH(t)}</span><span></span></div>`)}
+    </div></div>`;
+}
+function showShiftSummary(id){
+  const shift = posShiftsList.find(s=>s.id===id);
+  if(!shift){ toast('Shift not found.'); return; }
+  const box = document.getElementById('shiftModalBox');
+  box.style.maxWidth = '460px';
+  box.innerHTML = `<h3>Shift summary</h3>${shiftSummaryInner(shift)}
+    <button class="btn" data-readonly-ok="1" style="width:100%;margin-top:12px;" onclick="printShiftSummary('${id}')">Print summary</button>
+    <button class="btn ghost" data-readonly-ok="1" style="width:100%;margin-top:8px;" onclick="closeShiftModal()">Close</button>`;
+  document.getElementById('shiftModal').classList.add('open');
+}
+function printShiftSummary(id){
+  const shift = posShiftsList.find(s=>s.id===id);
+  if(!shift) return;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Shift summary</title><style>
+    body{font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:24px auto;color:#111;font-size:14px;}
+    h1{font-size:20px;margin:0 0 4px;} h4{margin:16px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #999;padding-bottom:3px;}
+    .sub{color:#555;margin-bottom:8px;} .order-summary div{display:flex;justify-content:space-between;gap:16px;padding:3px 0;}
+  </style></head><body><h1>Chug Jug PH — Shift summary</h1>${shiftSummaryInner(shift)}</body></html>`;
+  const win = window.open('', '_blank');
+  if(!win){ toast('Your browser blocked the new tab — please allow pop-ups to print.'); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+  win.addEventListener('load', ()=>{ win.focus(); win.print(); });
+  setTimeout(()=>{ try{ win.focus(); win.print(); }catch(e){} }, 400);
+}
 function renderShiftHistory(){
   const body = document.getElementById('shiftHistoryBody');
   if(!body) return;
   const shifts = posShiftsList.slice().sort((a,b)=>(b.openedAt||0)-(a.openedAt||0)).slice(0,20);
-  if(!shifts.length){ body.innerHTML = '<tr><td colspan="7"><div class="empty">No shifts recorded yet.</div></td></tr>'; return; }
+  if(!shifts.length){ body.innerHTML = '<tr><td colspan="8"><div class="empty">No shifts recorded yet.</div></td></tr>'; return; }
   body.innerHTML = shifts.map(s=>{
     const varianceText = s.variance==null ? '—' : `${s.variance>=0?'+':'−'}${fmtPeso(Math.abs(s.variance))}`;
     const varianceClass = s.variance==null ? '' : Math.abs(s.variance)<0.01 ? 'pill ok' : 'pill low';
@@ -4533,6 +4703,7 @@ function renderShiftHistory(){
       <td class="mono">${s.expectedCash!=null?fmtPeso(s.expectedCash):'—'}</td>
       <td class="mono">${s.actualCash!=null?fmtPeso(s.actualCash):'—'}</td>
       <td class="mono"><span class="${varianceClass}">${varianceText}</span></td>
+      <td><button class="btn ghost" data-readonly-ok="1" onclick="showShiftSummary('${s.id}')">Summary</button></td>
     </tr>`;
   }).join('');
 }
