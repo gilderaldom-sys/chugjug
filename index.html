@@ -143,6 +143,7 @@ main{padding:32px 0 60px;min-width:0;}
 .help-check{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:13.5px;line-height:1.5;cursor:pointer;}
 .help-check input{margin-top:3px;accent-color:var(--cyan);}
 .help-check.done span{opacity:.5;text-decoration:line-through;}
+.order-alert-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;font-family:var(--mono);font-size:12px;color:rgba(255,243,214,.75);}
 .ss-block h4{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--cyan);margin:14px 0 6px;}
 .help-body mark,.help-intro mark{background:rgba(45,226,255,.28);color:#fff;border-radius:2px;}
 
@@ -652,6 +653,12 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
   </section>
 
   <section class="view" id="v-sales">
+    <div class="order-alert-bar" id="orderAlertBar">
+      <span>🔔 New-order alerts</span>
+      <button class="btn ghost" type="button" id="oaSoundBtn" data-readonly-ok="1" onclick="toggleOrderSound()">Sound: on</button>
+      <button class="btn ghost" type="button" id="oaNotifyBtn" data-readonly-ok="1" onclick="enableOrderNotifications()">Desktop alerts: off</button>
+      <button class="btn ghost" type="button" data-readonly-ok="1" onclick="testOrderAlert()">Test</button>
+    </div>
     <div class="panel" id="onlineOrdersPanel" style="display:none;">
       <h2>Online orders <span class="sm" id="onlineOrdersCount"></span></h2>
       <div class="sub" style="margin:-4px 0 14px;">Orders placed on chugjugph.vercel.app land here first. Confirm to turn one into a real sale (deducts stock); decline to dismiss it.</div>
@@ -1164,6 +1171,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 <div class="help-toc" id="helpToc"></div></div>
 <div class="panel help-extra" id="helpWhatsNew"><h2>What's new <span class="sm">latest changes to the dashboard</span></h2>
 <ul class="help-list">
+<li><b>Oct 17</b> — <b>New-order alerts.</b> While the dashboard is open, a new online order now plays a chime, shows a pop-up and flashes the browser tab. Orders tab has buttons to turn sound off and enable desktop notifications.</li>
 <li><b>Oct 17</b> — <b>End-of-shift summary.</b> Closing a shift now shows one page: sales by payment method, what sold, cash result, voids and low stock. Print it, or reopen any past shift with <b>Summary</b> in Shift history (POS tab).</li>
 <li><b>Oct 17</b> — <b>Best sellers by day.</b> Reports tab: units per flavor for each day of the week, so you know what to stock before busy days.</li>
 <li><b>Oct 16</b> — <b>Help tab.</b> This page: the full operating procedure, searchable.</li>
@@ -1264,6 +1272,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 <p>The POS, Inventory and Orders tabs show a live badge count in the sidebar when there's something pending (e.g. unconfirmed online orders).</p></div></details>
 <details class="panel help-sec" id="help-2" data-title="Orders"><summary><h2>Orders</h2></summary><div class="help-body"><h3>Incoming online orders</h3>
 <p>Orders placed on chugjugph.vercel.app land in the <strong>"Online orders"</strong> panel at the top of the Orders tab: <em>"Orders placed on chugjugph.vercel.app land here first. Confirm to turn one into a real sale (deducts stock); decline to dismiss it."</em> Each card shows the customer, items, subtotal, any promo/bundle/referral discount applied, payment method, a payment status pill (UNPAID/PARTIAL/PAID), and a <strong>"view proof"</strong> button if a payment screenshot was uploaded.</p>
+<p><strong>Alerts.</strong> While the dashboard is open, a new online order plays a chime, shows a pop-up and flashes the browser tab. Use the buttons at the top of the Orders tab to turn the sound off or enable desktop notifications. Alerts only work while the dashboard is open in a browser tab.</p>
 <p>For each order:</p>
 <ol>
 <li><strong>Check the payment proof</strong> (if attached) matches the amount due.</li>
@@ -3677,6 +3686,77 @@ document.querySelectorAll('.sidebar-nav button').forEach(btn=>{
   });
 })();
 
+
+// --- New online order alerts ------------------------------------------------
+// The storefront writes to online_orders; this watches for NEW ones arriving
+// while the dashboard is open and makes noise: a chime, a toast, a flashing tab
+// title and (if allowed) a desktop notification. The first load only records
+// what already exists, so opening the dashboard never replays old orders.
+let knownNewOrderIds = null;
+let orderAudioCtx = null;
+let titleFlashTimer = null;
+const BASE_TITLE = document.title;
+function getAlertPrefs(){ try{ return JSON.parse(localStorage.getItem('cj_order_alerts')||'{}')||{}; }catch(e){ return {}; } }
+function setAlertPref(k,v){ const p = getAlertPrefs(); p[k]=v; try{ localStorage.setItem('cj_order_alerts', JSON.stringify(p)); }catch(e){} }
+function refreshAlertBar(){
+  const snd = document.getElementById('oaSoundBtn'), nt = document.getElementById('oaNotifyBtn');
+  if(snd) snd.textContent = 'Sound: ' + (getAlertPrefs().sound===false ? 'off' : 'on');
+  if(nt){
+    const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+    nt.textContent = perm==='granted' ? 'Desktop alerts: on' : perm==='denied' ? 'Desktop alerts: blocked' : perm==='unsupported' ? 'Desktop alerts: not supported' : 'Desktop alerts: off (tap to enable)';
+  }
+}
+function toggleOrderSound(){ setAlertPref('sound', getAlertPrefs().sound===false); refreshAlertBar(); if(getAlertPrefs().sound!==false) playOrderChime(); }
+async function enableOrderNotifications(){
+  if(!('Notification' in window)){ toast('This browser does not support desktop notifications.'); return; }
+  if(Notification.permission==='denied'){ toast('Notifications are blocked — allow them in your browser\'s site settings.'); return; }
+  try{ await Notification.requestPermission(); }catch(e){}
+  refreshAlertBar();
+}
+function playOrderChime(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+    const ctx = orderAudioCtx || (orderAudioCtx = new AC());
+    if(ctx.state==='suspended') ctx.resume();
+    [[880,0],[1175,0.18]].forEach(([f,t])=>{
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type='sine'; o.frequency.value=f; o.connect(g); g.connect(ctx.destination);
+      const t0 = ctx.currentTime + t;
+      g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.25,t0+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.4);
+      o.start(t0); o.stop(t0+0.45);
+    });
+  }catch(e){}
+}
+function flashTitle(n){
+  stopTitleFlash();
+  let on = false;
+  titleFlashTimer = setInterval(()=>{ document.title = on ? BASE_TITLE : `(${n}) New order!`; on = !on; }, 1000);
+}
+function stopTitleFlash(){ if(titleFlashTimer){ clearInterval(titleFlashTimer); titleFlashTimer=null; } document.title = BASE_TITLE; }
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) stopTitleFlash(); });
+window.addEventListener('focus', stopTitleFlash);
+function announceNewOrders(orders, pendingCount){
+  const first = orders[0] || {};
+  const label = orders.length>1 ? `${orders.length} new online orders` : `New online order ${first.orderNo||''}`.trim();
+  const who = orders.length>1 ? '' : ` — ${first.customerName||'customer'}${first.subtotal!=null?', '+fmtPeso(first.subtotal):''}`;
+  toast(label+who, 'ok');
+  if(getAlertPrefs().sound!==false) playOrderChime();
+  if(document.hidden){
+    flashTitle(pendingCount);
+    try{ if('Notification' in window && Notification.permission==='granted') new Notification('Chug Jug PH — '+label, { body: who.replace(/^ — /,'') || 'Open the dashboard to confirm.', tag:'cj-new-order' }); }catch(e){}
+  }
+}
+function checkNewOnlineOrders(){
+  const pending = onlineOrdersList.filter(o=>o.status==='NEW');
+  const ids = pending.map(o=>o.id);
+  if(knownNewOrderIds===null){ knownNewOrderIds = new Set(ids); return; }
+  const fresh = pending.filter(o=>!knownNewOrderIds.has(o.id));
+  ids.forEach(id=>knownNewOrderIds.add(id));
+  if(fresh.length && canView('sales')) announceNewOrders(fresh, pending.length);
+}
+function testOrderAlert(){ playOrderChime(); toast('Test alert — this is how a new online order will sound.', 'ok'); refreshAlertBar(); }
+refreshAlertBar();
+
 // sale flavor select
 const saleFlavorSel = document.getElementById('saleFlavor');
 FLAVORS.forEach(f=>{
@@ -3839,6 +3919,7 @@ async function startApp(){
   db.collection('online_orders').orderBy('ts','desc').limit(200).onSnapshot(snap=>{
     onlineOrdersList = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderOnlineOrders();
+    checkNewOnlineOrders();
   }, err=>console.error('online_orders', err));
 
   db.doc('settings/targets').onSnapshot(snap=>{
