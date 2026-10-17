@@ -1149,13 +1149,14 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
     </div>
     <div class="panel">
       <h2>Backup &amp; restore <span class="sm">export everything, or load it back in</span></h2>
-      <div class="sub" style="margin:-4px 0 14px;">A full backup includes customers, orders, products, recipes, inventory, movements, suppliers, purchase orders, production batches, expenses, targets and settings. Importing never wipes data it doesn't touch.</div>
+      <div class="sub" style="margin:-4px 0 14px;">A full backup includes customers, in-store and online orders, products, recipes, inventory, movements, suppliers, purchase orders, production batches, expenses, targets and settings. Importing never wipes data it doesn't touch.</div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
         <button class="btn" data-readonly-ok="1" onclick="exportFullBackup()">Export full backup (JSON)</button>
         <label class="btn secondary" style="cursor:pointer;">Import backup
           <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importFullBackup(event)">
         </label>
       </div>
+      <div class="mono" id="backupReminder" style="margin-top:10px;font-size:12px;"></div>
       <div class="login-error mono" id="backupStatus" style="color:var(--lime);text-align:left;margin-top:10px;"></div>
     </div>
     <div class="panel">
@@ -3321,11 +3322,26 @@ function exportFullBackup(){
     products:productsList, components:componentsList, recipe_items:recipeItemsList,
     inventory_movements:movementsList, expenses:expensesList, purchase_orders:purchaseOrdersList,
     production_batches:productionBatchesList, activity_log:activityLogList,
+    online_orders: (typeof onlineOrdersList !== 'undefined' ? onlineOrdersList : []),
+    pos_shifts: (typeof posShiftsList !== 'undefined' ? posShiftsList : []),
     settings: { targets: target, finance: cashSettings }
   };
   downloadText(`chugjug-backup-${todayStr()}.json`, JSON.stringify(backup, null, 2), 'application/json');
+  try{ localStorage.setItem('cj_last_backup', String(Date.now())); }catch(e){}
+  refreshBackupReminder();
   logActivity('Full data backup exported');
 }
+function refreshBackupReminder(){
+  const el = document.getElementById('backupReminder');
+  if(!el) return;
+  let t = 0;
+  try{ t = Number(localStorage.getItem('cj_last_backup')) || 0; }catch(e){}
+  if(!t){ el.style.color='var(--amber, #ffb020)'; el.textContent = 'No backup downloaded from this browser yet. Export one now and keep it somewhere safe (Google Drive, email to yourself).'; return; }
+  const days = Math.floor((Date.now()-t)/86400000);
+  el.style.color = days >= 7 ? 'var(--amber, #ffb020)' : 'var(--lime)';
+  el.textContent = days === 0 ? 'Last backup: today.' : `Last backup: ${days} day${days===1?'':'s'} ago.` + (days >= 7 ? ' Time for a fresh one.' : '');
+}
+document.addEventListener('DOMContentLoaded', refreshBackupReminder);
 async function importFullBackup(evt){
   if(!isAdminUser){ toast('Only the main admin can restore a backup.'); return; }
   const file = evt.target.files[0];
