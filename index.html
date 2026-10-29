@@ -1172,6 +1172,7 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 <div class="help-toc" id="helpToc"></div></div>
 <div class="panel help-extra" id="helpWhatsNew"><h2>What's new <span class="sm">latest changes to the dashboard</span></h2>
 <ul class="help-list">
+<li><b>Oct 30</b> — <b>New 1.5 L recipes.</b> All five kits now use the new recipe (vodka or tequila minis, flavor mixer, citrus, simple syrup, soda, gummies). See the Recipe book in this Help tab. Check the costs of the new items in the Products tab.</li>
 <li><b>Oct 17</b> — <b>New-order alerts.</b> While the dashboard is open, a new online order now plays a chime, shows a pop-up and flashes the browser tab. Orders tab has buttons to turn sound off and enable desktop notifications.</li>
 <li><b>Oct 17</b> — <b>End-of-shift summary.</b> Closing a shift now shows one page: sales by payment method, what sold, cash result, voids and low stock. Print it, or reopen any past shift with <b>Summary</b> in Shift history (POS tab).</li>
 <li><b>Oct 17</b> — <b>Best sellers by day.</b> Reports tab: units per flavor for each day of the week, so you know what to stock before busy days.</li>
@@ -1441,6 +1442,15 @@ tr.lowstock td{background:rgba(255,63,129,.06);}
 </tbody>
 </table></div>
 <p>For anything not covered here, contact jhon@chugjug.ph.</p></div></details>
+<details class="panel help-sec" id="help-8" data-title="Recipe book"><summary><h2>Recipe book</h2></summary><div class="help-body"><p>Every kit makes one 1.5 L jug: about 1.4 L of liquid before ice, roughly 5.7% ABV. Add ice and the garnish when assembling. The same quantities are loaded in the Products tab, so production and stock deduct exactly this.</p>
+<div class="table-wrap"><table><thead><tr><th>Flavor</th><th>Spirit (4 × 50 ml)</th><th>Flavor mixer</th><th>Citrus</th><th>Simple syrup</th><th>Soda (1 L)</th><th>Gummies</th><th>Garnish</th></tr></thead><tbody>
+<tr><td>Blue Razz Rush</td><td>Vodka</td><td>100 ml blue raspberry</td><td>50 ml lemon/lime</td><td>50 ml</td><td>Lemon-lime</td><td>60 g blue</td><td>Dried lemon/lime</td></tr>
+<tr><td>Strawberry Bomb</td><td>Vodka</td><td>100 ml strawberry</td><td>50 ml lemon</td><td>50 ml</td><td>Lemon-lime</td><td>60 g strawberry</td><td>Dried strawberry/lemon</td></tr>
+<tr><td>Mango Sunrise</td><td><b>Tequila</b></td><td>100 ml mango</td><td>50 ml orange + 50 ml lime</td><td>none</td><td>Lemon-lime</td><td>60 g mango</td><td>Dried orange/mango</td></tr>
+<tr><td>Green Apple Chaos</td><td>Vodka</td><td>100 ml green apple</td><td>50 ml lime</td><td>50 ml</td><td>Lemon-lime</td><td>60 g green apple</td><td>Dried lime/apple</td></tr>
+<tr><td>Grape Escape</td><td>Vodka</td><td>100 ml grape</td><td>50 ml lemon/lime</td><td>50 ml</td><td><b>Grape soda</b></td><td>60 g grape</td><td>Dried citrus</td></tr>
+</tbody></table></div>
+<p><b>Tip:</b> for a less sweet, more cocktail-like Mango Sunrise, swap some of the lemon-lime soda for sparkling water. Gummies are set at 60 g, the middle of the 50–75 g range; adjust in the Products tab if you pack more or less.</p></div></details>
 </section>
 </main>
   </div>
@@ -1461,14 +1471,24 @@ const EXPENSE_CATEGORIES = ['Marketing','Delivery','Labor','Utilities','Packagin
 // are placeholder starting points — every cost and quantity is editable in
 // the Products tab, never hard-coded assumptions about your real costs.
 const DEFAULT_COMPONENTS = [
-  {name:'Mini Liquor Bottles', category:'liquor', unit:'pcs', costPerUnit:12},
-  {name:'Blue Curacao Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
+  {name:'Vodka Mini Bottles (50 ml)', category:'liquor', unit:'pcs', costPerUnit:12},
+  {name:'Tequila Mini Bottles (50 ml)', category:'liquor', unit:'pcs', costPerUnit:15},
+  {name:'Blue Raspberry Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
   {name:'Strawberry Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
   {name:'Mango Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
   {name:'Green Apple Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
   {name:'Grape Mixer', category:'mixer', unit:'ml', costPerUnit:0.8},
-  {name:'Gummies', category:'candy', unit:'g', costPerUnit:0.5},
-  {name:'Candy', category:'candy', unit:'pcs', costPerUnit:1},
+  {name:'Citrus Mixer (lemon/lime)', category:'mixer', unit:'ml', costPerUnit:0.3},
+  {name:'Orange Citrus Mixer', category:'mixer', unit:'ml', costPerUnit:0.3},
+  {name:'Lime Juice', category:'mixer', unit:'ml', costPerUnit:0.3},
+  {name:'Simple Syrup', category:'mixer', unit:'ml', costPerUnit:0.1},
+  {name:'Lemon-Lime Soda (1 L)', category:'mixer', unit:'pcs', costPerUnit:65},
+  {name:'Grape Soda (1 L)', category:'mixer', unit:'pcs', costPerUnit:65},
+  {name:'Blue Gummies', category:'candy', unit:'g', costPerUnit:0.5},
+  {name:'Strawberry Gummies', category:'candy', unit:'g', costPerUnit:0.5},
+  {name:'Mango Gummies', category:'candy', unit:'g', costPerUnit:0.5},
+  {name:'Green Apple Gummies', category:'candy', unit:'g', costPerUnit:0.5},
+  {name:'Grape Gummies', category:'candy', unit:'g', costPerUnit:0.5},
   {name:'Dried Lemon', category:'garnish', unit:'pcs', costPerUnit:2},
   {name:'Dried Orange', category:'garnish', unit:'pcs', costPerUnit:2},
   {name:'Dried Lime', category:'garnish', unit:'pcs', costPerUnit:2},
@@ -1478,11 +1498,11 @@ const DEFAULT_COMPONENTS = [
   {name:'Packaging Box', category:'packaging', unit:'pcs', costPerUnit:8},
 ];
 const DEFAULT_RECIPES = {
-  blue:  [['Mini Liquor Bottles',4],['Blue Curacao Mixer',120],['Gummies',30],['Dried Lemon',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
-  straw: [['Mini Liquor Bottles',4],['Strawberry Mixer',120],['Gummies',30],['Dried Lemon',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
-  mango: [['Mini Liquor Bottles',4],['Mango Mixer',120],['Gummies',30],['Dried Orange',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
-  apple: [['Mini Liquor Bottles',4],['Green Apple Mixer',120],['Gummies',30],['Dried Lime',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
-  grape: [['Mini Liquor Bottles',4],['Grape Mixer',120],['Gummies',30],['Dried Lemon',2],['Candy',5],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  blue: [['Vodka Mini Bottles (50 ml)',4],['Blue Raspberry Mixer',100],['Citrus Mixer (lemon/lime)',50],['Simple Syrup',50],['Lemon-Lime Soda (1 L)',1],['Blue Gummies',60],['Dried Lemon',2],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  straw: [['Vodka Mini Bottles (50 ml)',4],['Strawberry Mixer',100],['Citrus Mixer (lemon/lime)',50],['Simple Syrup',50],['Lemon-Lime Soda (1 L)',1],['Strawberry Gummies',60],['Dried Lemon',2],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  mango: [['Tequila Mini Bottles (50 ml)',4],['Mango Mixer',100],['Orange Citrus Mixer',50],['Lime Juice',50],['Lemon-Lime Soda (1 L)',1],['Mango Gummies',60],['Dried Orange',2],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  apple: [['Vodka Mini Bottles (50 ml)',4],['Green Apple Mixer',100],['Citrus Mixer (lemon/lime)',50],['Simple Syrup',50],['Lemon-Lime Soda (1 L)',1],['Green Apple Gummies',60],['Dried Lime',2],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
+  grape: [['Vodka Mini Bottles (50 ml)',4],['Grape Mixer',100],['Citrus Mixer (lemon/lime)',50],['Simple Syrup',50],['Grape Soda (1 L)',1],['Grape Gummies',60],['Dried Lemon',2],['Chug Jug (container)',1],['Faucet',1],['Label',1],['Packaging Box',1]],
 };
 const HUBS = [
   {id:'ncr', name:'Metro Manila', lat:14.5995, lng:120.9842, group:'luzon', sx:127.85, sy:197.06},
